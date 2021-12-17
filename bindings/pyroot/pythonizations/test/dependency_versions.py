@@ -8,13 +8,21 @@ import sys
 # Compile list of packages to be ignored in the test
 ignore = []
 
-if sys.version_info[0] == 2 and "ROOTTEST_IGNORE_NUMBA_PY2" in os.environ or \
-   sys.version_info[0] == 3 and "ROOTTEST_IGNORE_NUMBA_PY3" in os.environ:
-       ignore += ['numba', 'cffi']
+# Dependencies of distributed RDataFrame are ignored in this test because they
+# are checked through specific build options (`test_distrdf_*`).
+# The dependencies are checked at configuration time so that we know whether the
+# CTest environment would be ready for the tests of the distributed RDF backends
+ignore.append('pyspark')
+ignore.append('dask')
+ignore.append('distributed')
 
-if sys.version_info[0] == 2 and "ROOTTEST_IGNORE_JUPYTER_PY2" in os.environ or \
-   sys.version_info[0] == 3 and "ROOTTEST_IGNORE_JUPYTER_PY3" in os.environ:
-       ignore += ['notebook', 'metakernel']
+if sys.version_info[0] == 2 and 'ROOTTEST_IGNORE_NUMBA_PY2' in os.environ or \
+   sys.version_info[0] == 3 and 'ROOTTEST_IGNORE_NUMBA_PY3' in os.environ:
+    ignore += ['numba', 'cffi']
+
+if sys.version_info[0] == 2 and 'ROOTTEST_IGNORE_JUPYTER_PY2' in os.environ or \
+   sys.version_info[0] == 3 and 'ROOTTEST_IGNORE_JUPYTER_PY3' in os.environ:
+    ignore += ['notebook', 'metakernel']
 
 
 class DependencyVersions(unittest.TestCase):

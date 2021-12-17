@@ -176,7 +176,7 @@ public:
   /// \param[in] proxyOwnsArg Proxy will delete the payload if owning.
   RooTemplateProxy(const char* theName, const char* desc, RooAbsArg* owner, T& ref,
       Bool_t valueServer=true, Bool_t shapeServer=false, Bool_t proxyOwnsArg=false) :
-        RooArgProxy(theName, desc, owner, ref, valueServer, shapeServer, proxyOwnsArg) { }
+        RooArgProxy(theName, desc, owner, const_cast<typename std::remove_const<T>::type&>(ref), valueServer, shapeServer, proxyOwnsArg) { }
 
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -235,6 +235,37 @@ public:
     }
   }
 
+
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Create a new object held and owned by proxy.
+  /// Can only be done if the proxy was non-owning before.
+  template<class U, class... ConstructorArgs>
+  U& emplaceOwnedArg(ConstructorArgs&&... constructorArgs) {
+    if(_ownArg) {
+      // let's maybe not support overwriting owned args unless it becomes necessary
+      throw std::runtime_error("Error in RooTemplateProxy: emplaceOwnedArg<>() called on a proxy already owning an arg.");
+    }
+    auto ownedArg = new U{std::forward<ConstructorArgs>(constructorArgs)...};
+    setArg(*ownedArg);
+    _ownArg = true;
+    return *ownedArg;
+  }
+
+
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Move a new object held and owned by proxy.
+  /// Can only be done if the proxy was non-owning before.
+  template<class U>
+  U& putOwnedArg(std::unique_ptr<U> ownedArg) {
+    if(_ownArg) {
+      // let's maybe not support overwriting owned args unless it becomes necessary
+      throw std::runtime_error("Error in RooTemplateProxy: putOwnedArg<>() called on a proxy already owning an arg.");
+    }
+    auto argPtr = ownedArg.get();
+    setArg(*ownedArg.release());
+    _ownArg = true;
+    return *argPtr;
+  }
 
   /// \name Legacy interface
   /// In ROOT versions before 6.22, RooFit didn't have this typed proxy. Therefore, a number of functions

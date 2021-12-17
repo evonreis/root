@@ -45,7 +45,8 @@ protected:
   RooRealProxy sigma ;
 
   Double_t evaluate() const override;
-  RooSpan<double> evaluateSpan(RooBatchCompute::RunContext& evalData, const RooArgSet* normSet) const override;
+  void computeBatch(cudaStream_t*, double* output, size_t size, RooBatchCompute::DataMap&) const override;
+  inline bool canComputeBatchWithCuda() const override { return true; }
 
 private:
 

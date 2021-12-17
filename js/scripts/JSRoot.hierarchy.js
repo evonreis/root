@@ -135,7 +135,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                _title: "NULL",
                _value: "null",
                _obj: null
-            }
+            };
          } else {
            item = {
              _name: obj.fName || obj.name,
@@ -146,7 +146,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
            switch(obj._typename) {
               case 'TColor': item._value = jsrp.getRGBfromTColor(obj); break;
-              case 'TText': item._value = obj.fTitle; break;
+              case 'TText':
               case 'TLatex': item._value = obj.fTitle; break;
               case 'TObjString': item._value = obj.fString; break;
               default: if (lst.opt && lst.opt[i] && lst.opt[i].length) item._value = lst.opt[i];
@@ -155,8 +155,8 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
            if (do_context && jsrp.canDraw(obj._typename)) item._direct_context = true;
 
            // if name is integer value, it should match array index
-           if (!item._name || (!isNaN(parseInt(item._name)) && (parseInt(item._name)!==i))
-               || (lst.arr.indexOf(obj)<i)) {
+           if (!item._name || (Number.isInteger(parseInt(item._name)) && (parseInt(item._name)!==i))
+               || (lst.arr.indexOf(obj) < i)) {
               item._name = i.toString();
            } else {
               // if there are several such names, add cycle number to the item name
@@ -209,7 +209,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                item._expand = function(node, obj) {
                   // one can get expand call from child objects - ignore them
                   return keysHierarchy(node, obj.fKeys);
-               }
+               };
             } else {
                // remove cycle number - we have already directory
                item._name = key.fName;
@@ -281,7 +281,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          prnt = prnt._parent;
       }
 
-      let isarray = (proto.lastIndexOf('Array]') == proto.length-6) && (proto.indexOf('[object')==0) && !isNaN(obj.length),
+      let isarray = (JSROOT._.is_array_proto(proto) > 0) && obj.length,
           compress = isarray && (obj.length > JSROOT.settings.HierarchyLimit),  arrcompress = false;
 
       if (isarray && (top._name==="Object") && !top._parent) top._name = "Array";
@@ -297,14 +297,14 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
       if (!('_obj' in top))
          top._obj = obj;
-      else
-      if (top._obj !== obj) alert('object missmatch');
+      else if (top._obj !== obj)
+         alert('object missmatch');
 
       if (!top._title) {
          if (obj._typename)
             top._title = "ROOT." + obj._typename;
-         else
-         if (isarray) top._title = "Array len: " + obj.length;
+         else if (isarray)
+            top._title = "Array len: " + obj.length;
       }
 
       if (arrcompress) {
@@ -321,8 +321,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                   if (nextk===obj.length) break;
                   prevk = nextk;
                   nextk = Math.min(nextk+10,obj.length);
-               } else
-               if (prevk !== k) {
+               } else if (prevk !== k) {
                   // last block with similar
                   nextk = prevk;
                   allsame = true;
@@ -358,7 +357,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
          if (compress && lastitem) {
             if (lastfield===fld) { ++cnt; lastkey = key; continue; }
-            if (cnt>0) lastitem._name += ".." + lastkey;
+            if (cnt > 0) lastitem._name += ".." + lastkey;
          }
 
          let item = { _parent: top, _name: key };
@@ -377,7 +376,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
             proto = Object.prototype.toString.apply(fld);
 
-            if ((proto.lastIndexOf('Array]') == proto.length-6) && (proto.indexOf('[object')==0)) {
+            if (JSROOT._.is_array_proto(proto) > 0) {
                item._title = "array len=" + fld.length;
                simple = (proto != '[object Array]');
                if (fld.length === 0) {
@@ -428,7 +427,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
                   switch(fld._typename) {
                      case 'TColor': item._value = jsrp.getRGBfromTColor(fld); break;
-                     case 'TText': item._value = fld.fTitle; break;
+                     case 'TText':
                      case 'TLatex': item._value = fld.fTitle; break;
                      case 'TObjString': item._value = fld.fString; break;
                      default:
@@ -479,7 +478,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
       let h = { _name : "StreamerInfo", _childs : [] };
 
       for (let i = 0; i < lst.arr.length; ++i) {
-         let entry = lst.arr[i]
+         let entry = lst.arr[i];
 
          if (entry._typename == "TList") continue;
 
@@ -674,6 +673,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
       main.insert('div', ".jsroot_browser_btns").classed('jsroot_browser_area', true)
           .style('position',"absolute").style('left',0).style('top',0).style('bottom',0).style('width','250px')
+          .style('overflow', 'hidden')
           .style('padding-left','5px')
           .style('display','flex').style('flex-direction', 'column')   /* use the flex model */
           .html("<p class='jsroot_browser_title'>title</p>" +  guiCode);
@@ -946,7 +946,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                // when search for the elements it could be allowed to check index
                if (allow_index && /^\d+$/.test(localname)) {
                   let indx = parseInt(localname);
-                  if (!isNaN(indx) && (indx >= 0) && (indx < top._childs.length))
+                  if (Number.isInteger(indx) && (indx >= 0) && (indx < top._childs.length))
                      return process_child(top._childs[indx]);
                }
             }
@@ -1017,35 +1017,37 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
       let hitem = this.findItem(itemname),
           url = this.getOnlineItemUrl(hitem) + "/cmd.json",
-          d3node = d3.select(elem);
+          d3node = d3.select(elem),
+          promise = Promise.resolve("");
 
-      if ('_numargs' in hitem)
-         for (let n = 0; n < hitem._numargs; ++n) {
-            let argname = "arg" + (n+1), argvalue = undefined;
-            if (n+2 < arguments.length) argvalue = arguments[n+2];
-            if ((argvalue===undefined) && elem)
-               argvalue = prompt("Input argument " + argname + " for command " + hitem._name, "");
-            if (argvalue===null) return Promise.resolve(false);
-            url += ((n==0) ? "?" : "&") + argname + "=" + argvalue;
-         }
-
-      if (!d3node.empty()) {
-         d3node.style('background','yellow');
-         if (hitem && hitem._title) d3node.attr('title', "Executing " + hitem._title);
+      if ('_numargs' in hitem) {
+         let cmdargs = [];
+         for (let n = 0; n < hitem._numargs; ++n)
+            cmdargs.push((n+2 < arguments.length) ? arguments[n+2] : "");
+         promise = JSROOT.require("jq2d").then(() => this.commandArgsDialog(hitem._name, cmdargs));
       }
 
-      return JSROOT.httpRequest(url, 'text').then(res => {
-         if (!d3node.empty()) {
-            let col = ((res != null) && (res != 'false')) ? 'green' : 'red';
-            if (hitem && hitem._title) d3node.attr('title', hitem._title + " lastres=" + res);
-            d3node.style('background', col);
-            setTimeout(() => d3node.style('background', ''), 2000);
-            if ((col == 'green') && ('_hreload' in hitem))
-               this.reload();
-            if ((col == 'green') && ('_update_item' in hitem))
-               this.updateItems(hitem._update_item.split(";"));
+      return promise.then(urlargs => {
+         if (typeof urlargs != "string") return false;
+
+        if (!d3node.empty()) {
+            d3node.style('background','yellow');
+            if (hitem && hitem._title) d3node.attr('title', "Executing " + hitem._title);
          }
-         return res;
+
+         return JSROOT.httpRequest(url + urlargs, 'text').then(res => {
+            if (!d3node.empty()) {
+               let col = ((res != null) && (res != 'false')) ? 'green' : 'red';
+               if (hitem && hitem._title) d3node.attr('title', hitem._title + " lastres=" + res);
+               d3node.style('background', col);
+               setTimeout(() => d3node.style('background', ''), 2000);
+               if ((col == 'green') && ('_hreload' in hitem))
+                  this.reload();
+               if ((col == 'green') && ('_update_item' in hitem))
+                  this.updateItems(hitem._update_item.split(";"));
+            }
+            return res;
+         });
       });
    }
 
@@ -1105,7 +1107,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
             if ((arg.rest == d.rest) || (arg.rest.length <= d.rest.length))
                return Promise.resolve(result);
 
-         return this.expandItem(parentname, null, true).then(res => {
+         return this.expandItem(parentname, undefined, options != "hierarchy_expand_verbose").then(res => {
             if (!res) return result;
             let newparentname = this.itemFullName(d.last);
             if (newparentname.length > 0) newparentname += "/";
@@ -1254,8 +1256,10 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
                let handle = null;
                if (obj._typename) handle = jsrp.getDrawHandle("ROOT." + obj._typename);
-               if (handle && handle.draw_field && obj[handle.draw_field])
+               if (handle && handle.draw_field && obj[handle.draw_field]) {
                   obj = obj[handle.draw_field];
+                  if (!drawopt) drawopt = handle.draw_field_opt || "";
+               }
 
                if ((typeof p.redrawObject == 'function') && p.redrawObject(obj, drawopt)) painter = p;
             });
@@ -1297,8 +1301,8 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
       if (opt && typeof opt === 'function') { call_back = opt; opt = ""; }
       if (opt===undefined) opt = "";
 
-      let drop_complete = drop_painter => {
-         if (drop_painter && (typeof drop_painter === 'object') && (typeof drop_painter.setItemName == 'function'))
+      let drop_complete = (drop_painter, is_main_painter) => {
+         if (drop_painter && !is_main_painter && (typeof drop_painter === 'object') && (typeof drop_painter.setItemName == 'function'))
             drop_painter.setItemName(itemname, null, this);
          return drop_painter;
       }
@@ -1316,10 +1320,10 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          let main_painter = jsrp.getElementMainPainter(divid);
 
          if (main_painter && (typeof main_painter.performDrop === 'function'))
-            return main_painter.performDrop(res.obj, itemname, res.item, opt).then(p => drop_complete(p));
+            return main_painter.performDrop(res.obj, itemname, res.item, opt).then(p => drop_complete(p, main_painter === p));
 
          if (main_painter && main_painter.accept_drops)
-            return JSROOT.draw(divid, res.obj, "same " + opt).then(p => drop_complete(p));
+            return JSROOT.draw(divid, res.obj, "same " + opt).then(p => drop_complete(p, main_painter === p));
 
          this.cleanupFrame(divid);
          return JSROOT.draw(divid, res.obj, opt).then(p => drop_complete(p));
@@ -1396,7 +1400,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
       if ((options.length == 1) && (options[0] == "iotest")) {
          this.clearHierarchy();
-         d3.select("#" + this.disp_frameid).html("<h2>Start I/O test</h2>")
+         d3.select("#" + this.disp_frameid).html("<h2>Start I/O test</h2>");
 
          let tm0 = new Date();
          return this.getObject(items[0]).then(() => {
@@ -1712,7 +1716,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          }
 
          return Promise.resolve(-1);
-      }
+      };
 
       let promise = Promise.resolve(-1);
 
@@ -1727,7 +1731,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
             return Promise.resolve();
          }
 
-         if (hitem._obj) promise = DoExpandItem(hitem, hitem._obj, itemname);
+         if (hitem._obj) promise = DoExpandItem(hitem, hitem._obj);
       }
 
       return promise.then(res => {
@@ -1735,7 +1739,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
          jsrp.showProgress("Loading " + itemname);
 
-         return this.getObject(itemname, "hierarchy_expand").then(res => {
+         return this.getObject(itemname, silent ? "hierarchy_expand" : "hierarchy_expand_verbose").then(res => {
 
             jsrp.showProgress();
 
@@ -1822,7 +1826,6 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
      * @param {string} filepath - URL to ROOT file
      * @returns {Promise} when file is opened */
    HierarchyPainter.prototype.openRootFile = function(filepath) {
-      // first check that file with such URL already opened
 
       let isfileopened = false;
       this.forEachRootFile(item => { if (item._fullurl===filepath) isfileopened = true; });
@@ -1847,8 +1850,10 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          return this.refreshHtml();
       }).catch(() => {
          // make CORS warning
-         if (!d3.select("#gui_fileCORS").style("background","red").empty())
-             setTimeout(function() { d3.select("#gui_fileCORS").style("background",''); }, 5000);
+         if (JSROOT.batch_mode)
+            console.error(`Fail to open ${filepath} - check CORS headers`);
+         else if (!d3.select("#gui_fileCORS").style("background","red").empty())
+            setTimeout(() => d3.select("#gui_fileCORS").style("background",''), 5000);
          return false;
       }).finally(() => jsrp.showProgress());
    }
@@ -1926,7 +1931,10 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
       let url = itemname, h_get = false, req = "", req_kind = "object", draw_handle = null;
 
-      if (option === 'hierarchy_expand') { h_get = true; option = undefined; }
+      if ((typeof option == "string") && (option.indexOf('hierarchy_expand')==0)) {
+         h_get = true;
+         option = undefined;
+      }
 
       if (item) {
          url = this.getOnlineItemUrl(item);
@@ -2009,29 +2017,31 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
          this.h._get = (item, itemname, option) => {
             return this.getOnlineItem(item, itemname, option);
-         }
+         };
 
          this.h._expand = onlineHierarchy;
 
-         let scripts = [], modules = [];
+         let styles = [], scripts = [], modules = [];
          this.forEachItem(item => {
             if ('_childs' in item) item._expand = onlineHierarchy;
 
             if ('_autoload' in item) {
                let arr = item._autoload.split(";");
-               for (let n = 0; n < arr.length; ++n)
-                  if ((arr[n].length>3) &&
-                      ((arr[n].lastIndexOf(".js")==arr[n].length-3) ||
-                      (arr[n].lastIndexOf(".css")==arr[n].length-4))) {
-                     if (!scripts.find(elem => elem == arr[n])) scripts.push(arr[n]);
-                  } else {
-                     if (arr[n] && !modules.find(elem => elem ==arr[n])) modules.push(arr[n]);
+               arr.forEach(name => {
+                  if ((name.length > 3) && (name.lastIndexOf(".js") == name.length-3)) {
+                     if (!scripts.find(elem => elem == name)) scripts.push(name);
+                  } else if ((name.length > 4) && (name.lastIndexOf(".css") == name.length-4)) {
+                     if (!styles.find(elem => elem == name)) styles.push(name);
+                  } else if (name && !modules.find(elem => elem == name)) {
+                     modules.push(name);
                   }
+               });
             }
          });
 
          return JSROOT.require(modules)
-               .then(() => JSROOT.loadScript(scripts))
+               .then(() => JSROOT.require(scripts))
+               .then(() => JSROOT.loadScript(styles))
                .then(() => {
                   this.forEachItem(item => {
                      if (!('_drawfunc' in item) || !('_kind' in item)) return;
@@ -2130,7 +2140,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
       if (interval) {
          interval = parseInt(interval);
-         if (!isNaN(interval) && (interval > 0)) {
+         if (Number.isInteger(interval) && (interval > 0)) {
             this._monitoring_interval = Math.max(100,interval);
             monitor_on = true;
          } else {
@@ -2359,14 +2369,14 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
       let d = JSROOT.decodeUrl(url);
 
-      function GetOption(opt) {
+      let GetOption = opt => {
          let res = d.get(opt, null);
          if ((res===null) && gui_div && !gui_div.empty() && gui_div.node().hasAttribute(opt))
             res = gui_div.attr(opt);
          return res;
-      }
+      };
 
-      function GetUrlOptionAsArray(opt) {
+      let GetUrlOptionAsArray = opt => {
 
          let res = [];
 
@@ -2387,9 +2397,9 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                res.push(val);
          }
          return res;
-      }
+      };
 
-      let GetOptionAsArray = (opt) => {
+      let GetOptionAsArray = opt => {
          let res = GetUrlOptionAsArray(opt);
          if (res.length>0 || !gui_div || gui_div.empty()) return res;
          while (opt.length>0) {
@@ -2409,7 +2419,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
             else if (val!==null) res.push(val);
          }
          return res;
-      }
+      };
 
       let prereq = GetOption('prereq') || "",
           filesdir = d.get("path") || "", // path used in normal gui
@@ -2417,6 +2427,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
           localfile = GetOption("localfile"),
           jsonarr = GetOptionAsArray("#json;jsons"),
           expanditems = GetOptionAsArray("expand"),
+          focusitem = GetOption("focus"),
           itemsarr = GetOptionAsArray("#item;items"),
           optionsarr = GetOptionAsArray("#opt;opts"),
           monitor = GetOption("monitoring"),
@@ -2484,7 +2495,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          status = true;
       else if (status!==null) {
          statush = parseInt(status);
-         if (isNaN(statush) || (statush < 5)) statush = 0;
+         if (!Number.isInteger(statush) || (statush < 5)) statush = 0;
          status = true;
       }
       if (this.no_select === "") this.no_select = true;
@@ -2530,13 +2541,14 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          else
             return this.refreshHtml()
                    .then(() => this.displayItems(itemsarr, optionsarr))
+                   .then(() => focusitem ? this.focusOnItem(focusitem) : this)
                    .then(() => {
                       this.setMonitoring(monitor);
                       return itemsarr ? this.refreshHtml() : this; // this is final return
                    });
 
          return promise.then(openAllFiles);
-      }
+      };
 
       let h0 = null;
       if (this.is_online) {
@@ -2575,13 +2587,13 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                document.title = this.h._toptitle;
 
             if (gui_div)
-               this.prepareGuiDiv(gui_div, this.disp_kind);
+               this.prepareGuiDiv(gui_div.attr('id'), this.disp_kind);
 
             return openAllFiles();
          });
 
       if (gui_div)
-         this.prepareGuiDiv(gui_div, this.disp_kind);
+         this.prepareGuiDiv(gui_div.attr('id'), this.disp_kind);
 
       return openAllFiles();
    }
@@ -2590,7 +2602,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
      * @private */
    HierarchyPainter.prototype.prepareGuiDiv = function(myDiv, layout) {
 
-      this.gui_div = myDiv.attr('id');
+      this.gui_div = (typeof myDiv == "string") ? myDiv : myDiv.attr('id');
 
       this.brlayout = new BrowserLayout(this.gui_div, this);
 
@@ -2664,7 +2676,10 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
    JSROOT.buildNobrowserGUI = function(gui_element, gui_kind) {
 
       let myDiv = (typeof gui_element == 'string') ? d3.select('#' + gui_element) : d3.select(gui_element);
-      if (myDiv.empty()) return alert('no div for simple nobrowser gui found');
+      if (myDiv.empty()) {
+         alert('no div for simple nobrowser gui found');
+         return Promise.resolve(null);
+      }
 
       let online = false, drawing = false;
       if (gui_kind == 'online')
@@ -2708,7 +2723,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          if (d.has("websocket")) opt+=";websocket";
          console.log('try to draw first object');
 
-         return hpainter.display("", opt).then(() => { return hpainter; });
+         return hpainter.display("", opt).then(() => hpainter);
       });
    }
 
@@ -2757,9 +2772,9 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          if (sett.opts)
             menu.addDrawMenu("nosub:Draw", sett.opts, function(arg) {
                if (!hitem || !hitem._obj) return;
-               let obj = hitem._obj, dom = this.selectDom();
+               let obj = hitem._obj, dom = this.selectDom().node();
                if (this.removeInspector) {
-                  dom = dom.node().parentNode;
+                  dom = dom.parentNode;
                   this.removeInspector();
                   if (arg == "inspect")
                      return this.showInspector(obj);
@@ -2806,7 +2821,9 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
       /** @summary method dedicated to iterate over existing panels
         * @param {function} userfunc is called with arguments (frame)
         * @param {boolean} only_visible let select only visible frames */
-      forEachFrame(/* userfunc, only_visible */) { console.warn("forEachFrame not implemented in MDIDisplay"); }
+      forEachFrame(userfunc, only_visible) {
+         console.warn(`forEachFrame not implemented in MDIDisplay ${typeof userfunc} ${only_visible}`);
+      }
 
       /** @summary method dedicated to iterate over existing panles
         * @param {function} userfunc is called with arguments (painter, frame)
@@ -2900,7 +2917,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          this.frames[divid] += (itemname + ";");
       }
 
-      forEachFrame(userfunc /* ,  only_visible */) {
+      forEachFrame(userfunc) {
          let ks = Object.keys(this.frames);
          for (let k = 0; k < ks.length; ++k) {
             let node = d3.select("#"+ks[k]);
@@ -2985,7 +3002,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                kind = kind.substr(1);
             }
 
-            let separ = kind.indexOf("x"), sizex = 3, sizey = 3;
+            let separ = kind.indexOf("x"), sizex, sizey;
 
             if (separ > 0) {
                sizey = parseInt(kind.substr(separ + 1));
@@ -2994,8 +3011,8 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                sizex = sizey = parseInt(kind);
             }
 
-            if (isNaN(sizex)) sizex = 3;
-            if (isNaN(sizey)) sizey = 3;
+            if (!Number.isInteger(sizex)) sizex = 3;
+            if (!Number.isInteger(sizey)) sizey = 3;
 
             if (sizey > 1) {
                this.vertical = true;
@@ -3018,7 +3035,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
 
          if (kind && kind.indexOf("_")>0) {
             let arg = parseInt(kind.substr(kind.indexOf("_")+1), 10);
-            if (!isNaN(arg) && (arg>10)) {
+            if (Number.isInteger(arg) && (arg > 10)) {
                kind = kind.substr(0, kind.indexOf("_"));
                sizes = [];
                while (arg>0) {
@@ -3098,7 +3115,8 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
                this.createSeparator(handle, main, handle.groups[cnt]);
       }
 
-      forEachFrame(userfunc /*, only_visible */) {
+      /** @summary Call function for each frame */
+      forEachFrame(userfunc) {
          if (this.simple_layout)
             userfunc(this.getGridFrame());
          else
@@ -3114,7 +3132,7 @@ JSROOT.define(['d3', 'painter'], (d3, jsrp) => {
          let found = super.getActiveFrame();
          if (found) return found;
 
-         this.forEachFrame(frame => { if (!found) found = frame; }, true);
+         this.forEachFrame(frame => { if (!found) found = frame; });
 
          return found;
       }

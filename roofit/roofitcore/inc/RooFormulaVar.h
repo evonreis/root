@@ -71,6 +71,11 @@ public:
   // Function evaluation
   virtual Double_t evaluate() const ;
   RooSpan<double> evaluateSpan(RooBatchCompute::RunContext& evalData, const RooArgSet* normSet) const;
+  inline void computeBatch(cudaStream_t* stream, double* output, size_t nEvents, RooBatchCompute::DataMap& dataMap) const
+  {
+    formula().computeBatch(stream, output, nEvents, dataMap);
+  }
+
 
   protected:
   // Post-processing of server redirection

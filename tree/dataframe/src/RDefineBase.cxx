@@ -9,6 +9,7 @@
  *************************************************************************/
 
 #include "ROOT/RDF/RDefineBase.hxx"
+#include "ROOT/RDF/Utils.hxx"
 #include "ROOT/RStringView.hxx"
 #include "RtypesCore.h" // Long64_t
 
@@ -17,20 +18,19 @@
 #include <atomic>
 
 using ROOT::Detail::RDF::RDefineBase;
-namespace RDFInternal = ROOT::Internal::RDF;
-
-unsigned int RDefineBase::GetNextID()
-{
-   static std::atomic_uint id(0U);
-   return ++id;
-}
+namespace RDFInternal = ROOT::Internal::RDF; // redundant (already present in the header), but Windows needs it
 
 RDefineBase::RDefineBase(std::string_view name, std::string_view type, unsigned int nSlots,
                          const RDFInternal::RBookedDefines &defines,
-                         const std::map<std::string, std::vector<void *>> &DSValuePtrs, ROOT::RDF::RDataSource *ds)
-   : fName(name), fType(type), fNSlots(nSlots), fLastCheckedEntry(fNSlots, -1), fDefines(defines),
-     fIsInitialized(nSlots, false), fDSValuePtrs(DSValuePtrs), fDataSource(ds)
+                         const std::map<std::string, std::vector<void *>> &DSValuePtrs, ROOT::RDF::RDataSource *ds,
+                         const ROOT::RDF::ColumnNames_t &columnNames)
+   : fName(name), fType(type), fLastCheckedEntry(nSlots * RDFInternal::CacheLineStep<Long64_t>(), -1),
+     fDefines(defines), fIsInitialized(nSlots, false), fDSValuePtrs(DSValuePtrs), fDataSource(ds),
+     fColumnNames(columnNames), fIsDefine(columnNames.size())
 {
+   const auto nColumns = fColumnNames.size();
+   for (auto i = 0u; i < nColumns; ++i)
+      fIsDefine[i] = fDefines.HasName(fColumnNames[i]);
 }
 
 // pin vtable. Work around cling JIT issue.

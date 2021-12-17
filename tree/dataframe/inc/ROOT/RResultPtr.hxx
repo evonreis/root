@@ -22,19 +22,34 @@
 #include <type_traits> // std::is_constructible
 
 namespace ROOT {
+namespace RDF {
+template <typename T>
+class RResultPtr;
+
+template <typename Proxied, typename DataSource>
+class RInterface;
+} // namespace RDF
+
 namespace Internal {
 namespace RDF {
 class GraphCreatorHelper;
+
+// no-op overload
+template <typename T>
+inline void WarnOnLazySnapshotNotTriggered(const ROOT::RDF::RResultPtr<T> &)
+{
+}
+
+template <typename DS>
+void WarnOnLazySnapshotNotTriggered(
+   const ROOT::RDF::RResultPtr<ROOT::RDF::RInterface<ROOT::Detail::RDF::RLoopManager, DS>> &r)
+{
+   if (!r.IsReady()) {
+      Warning("Snapshot", "A lazy Snapshot action was booked but never triggered.");
+   }
+}
 }
 } // namespace Internal
-} // namespace ROOT
-
-namespace ROOT {
-namespace RDF {
-// Fwd decl for MakeResultPtr
-template <typename T>
-class RResultPtr;
-} // namespace RDF
 
 namespace Detail {
 namespace RDF {
@@ -165,13 +180,19 @@ public:
    RResultPtr &operator=(const RResultPtr &) = default;
    RResultPtr &operator=(RResultPtr &&) = default;
    explicit operator bool() const { return bool(fObjPtr); }
+   ~RResultPtr()
+   {
+      if (fObjPtr.use_count() == 1) {
+         ROOT::Internal::RDF::WarnOnLazySnapshotNotTriggered(*this);
+      }
+   }
 
    /// Convert a RResultPtr<T2> to a RResultPtr<T>.
    ///
    /// Useful e.g. to store a number of RResultPtr<TH1D> and RResultPtr<TH2D> in a std::vector<RResultPtr<TH1>>.
    /// The requirements on T2 and T are the same as for conversion between std::shared_ptr<T2> and std::shared_ptr<T>.
-   template <typename T2, typename std::enable_if<std::is_constructible<std::shared_ptr<T>, std::shared_ptr<T2>>::value,
-                                                  int>::type = 0>
+   template <typename T2,
+             std::enable_if_t<std::is_constructible<std::shared_ptr<T>, std::shared_ptr<T2>>::value, int> = 0>
    RResultPtr(const RResultPtr<T2> &r) : fLoopManager(r.fLoopManager), fObjPtr(r.fObjPtr), fActionPtr(r.fActionPtr)
    {
    }
@@ -326,18 +347,6 @@ public:
       return *this;
    }
 
-   /// Return a pointer to the result, releasing its ownership and leaving this object empty.
-   T *Release()
-   {
-      if (fActionPtr != nullptr && !fActionPtr->HasRun())
-         TriggerRun();
-      fActionPtr = nullptr;
-      fLoopManager = nullptr;
-      auto p = fObjPtr.get();
-      fObjPtr.reset();
-      return p;
-   }
-
    // clang-format off
    /// Check whether the result has already been computed
    ///
@@ -434,7 +443,7 @@ MakeResultPtr(const std::shared_ptr<T> &r, RLoopManager &lm, std::shared_ptr<RDF
 template <typename T>
 std::unique_ptr<RMergeableValue<T>> GetMergeableValue(RResultPtr<T> &rptr)
 {
-
+   rptr.ThrowIfNull();
    if (!rptr.fActionPtr->HasRun())
       rptr.TriggerRun(); // Prevents from using `const` specifier in parameter
    return std::unique_ptr<RMergeableValue<T>>{

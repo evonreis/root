@@ -44,10 +44,10 @@
 #  define R__NULLPTR
 # endif
 #else
-# if defined(__cplusplus) && (__cplusplus < 201103L)
-#  error "ROOT requires support for C++11 or higher."
+# if defined(__cplusplus) && (__cplusplus < 201402L)
+#  error "ROOT requires support for C++14 or higher."
 #  if defined(__GNUC__) || defined(__clang__)
-#   error "Pass `-std=c++11` as compiler argument."
+#   error "Pass `-std=c++14` as compiler argument."
 #  endif
 # endif
 #endif
@@ -292,10 +292,14 @@
 #   if defined(__i386__)
 #      define R__BYTESWAP
 #   endif
-#   if defined(__arm__) || defined (__arm64__)
+#   if defined(__x86_64__)
+#      define R__BYTESWAP
+#      define R__B64      /* enable when 64 bit machine */
+#   endif
+#   if defined(__arm__)
 #      define R__BYTESWAP
 #   endif
-#   if defined(__x86_64__)
+#   if defined (__arm64__)
 #      define R__BYTESWAP
 #      define R__B64      /* enable when 64 bit machine */
 #   endif
@@ -329,16 +333,14 @@
 #   endif
 #endif
 
-#if __cplusplus >= 201402L
-#   if defined(R__MACOSX) && !defined(MAC_OS_X_VERSION_10_12)
-      // At least on 10.11, the compiler defines but the c++ library does not provide the size operator delete.
-      // See for example https://llvm.org/bugs/show_bug.cgi?id=22951 or
-      // https://github.com/gperftools/gperftools/issues/794.
-#   elif !defined(__GNUC__)
-#      define R__SIZEDDELETE
-#   elif __GNUC__ > 4
-#      define R__SIZEDDELETE
-#   endif
+#if defined(R__MACOSX) && !defined(MAC_OS_X_VERSION_10_12)
+   // At least on 10.11, the compiler defines but the c++ library does not provide the size operator delete.
+   // See for example https://llvm.org/bugs/show_bug.cgi?id=22951 or
+   // https://github.com/gperftools/gperftools/issues/794.
+#elif !defined(__GNUC__)
+#   define R__SIZEDDELETE
+#elif __GNUC__ > 4
+#   define R__SIZEDDELETE
 #endif
 
 /* allows symbols to be hidden from the shared library export symbol table */
@@ -384,6 +386,14 @@
 #   define R__ACCESS_IN_SYMBOL
 //#   define __attribute__(X)
 //#   define thread_local static __declspec(thread)
+#endif
+#ifdef _WIN64
+#   define R__WIN64
+#   ifndef WIN64
+#      define WIN64
+#   endif
+#   define __x86_64__ 1
+#   define R__B64      /* enable when 64 bit machine */
 #endif
 
 #ifdef __SC__
@@ -519,9 +529,9 @@
 /*---- misc ------------------------------------------------------------------*/
 
 #ifdef R__GNU
-#   define SafeDelete(p) { if (p) { delete p; p = 0; } }
+#   define SafeDelete(p) { if (p) { delete p; p = nullptr; } }
 #else
-#   define SafeDelete(p) { delete p; p = 0; }
+#   define SafeDelete(p) { delete p; p = nullptr; }
 #endif
 
 #ifdef __FAST_MATH__

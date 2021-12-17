@@ -41,7 +41,7 @@
 #include "TTabCom.h"
 #include <cstdlib>
 #include <algorithm>
-
+#include <iostream>
 #include "Getline.h"
 #include "strlcpy.h"
 #include "snprintf.h"
@@ -146,6 +146,16 @@ TRint::TRint(const char *appClassName, Int_t *argc, char **argv, void *options,
    TApplication(appClassName, argc, argv, options, numOptions),
    fCaughtSignal(-1)
 {
+
+   if (*argc > 1) {
+      // Early exit if there are remaining unrecognized options
+      for (auto n = 1; n < *argc; n++) {
+         std::cerr << "root: unrecognized option '" << argv[n] << "'\n";
+      }
+      std::cerr << "Try 'root --help' for more information.\n";
+      TApplication::Terminate(0);
+   }
+
    fNcmd          = 0;
    fDefaultPrompt = "root [%d] ";
    fInterrupt     = kFALSE;
@@ -350,7 +360,7 @@ void TRint::Run(Bool_t retrn)
       Getlinem(kInit, GetPrompt());
    }
 
-   Long_t retval = 0;
+   Longptr_t retval = 0;
    Int_t  error = 0;
    volatile Bool_t needGetlinemInit = kFALSE;
 
@@ -719,9 +729,9 @@ void TRint::SetEchoMode(Bool_t mode)
 /// The last argument 'script' allows to specify an alternative script to
 /// be executed remotely to startup the session.
 
-Long_t TRint::ProcessRemote(const char *line, Int_t *)
+Longptr_t TRint::ProcessRemote(const char *line, Int_t *)
 {
-   Long_t ret = TApplication::ProcessRemote(line);
+   Longptr_t ret = TApplication::ProcessRemote(line);
 
    if (ret == 1) {
       if (fAppRemote) {
@@ -741,14 +751,17 @@ Long_t TRint::ProcessRemote(const char *line, Int_t *)
 /// better diagnostics. Must be called after fNcmd has been increased for
 /// the next line.
 
-Long_t  TRint::ProcessLineNr(const char* filestem, const char *line, Int_t *error /*= 0*/)
+Longptr_t  TRint::ProcessLineNr(const char* filestem, const char *line, Int_t *error /*= 0*/)
 {
    Int_t err;
    if (!error)
       error = &err;
    if (line && line[0] != '.') {
-      TString lineWithNr = TString::Format("#line 1 \"%s%d\"\n", filestem, fNcmd - 1);
-      int res = ProcessLine(lineWithNr + line, kFALSE, error);
+      TString input;
+      if (!fBackslashContinue)
+         input += TString::Format("#line 1 \"%s%d\"\n", filestem, fNcmd - 1);
+      input += line;
+      int res = ProcessLine(input, kFALSE, error);
       if (*error == TInterpreter::kProcessing) {
          if (!fNonContinuePrompt.Length())
             fNonContinuePrompt = fDefaultPrompt;
@@ -757,6 +770,10 @@ Long_t  TRint::ProcessLineNr(const char* filestem, const char *line, Int_t *erro
          SetPrompt(fNonContinuePrompt);
          fNonContinuePrompt.Clear();
       }
+      std::string_view sv(line);
+      auto lastNonSpace = sv.find_last_not_of(" \t");
+      fBackslashContinue = (lastNonSpace != std::string_view::npos
+                            && sv[lastNonSpace] == '\\');
       return res;
    }
    if (line && line[0] == '.' && line[1] == '@') {

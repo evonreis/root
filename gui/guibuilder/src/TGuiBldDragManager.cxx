@@ -234,7 +234,7 @@ const char *TGuiBldMenuDialog::GetParameters()
       // if necessary, replace the selected object by it's address
       if (selfobjpos == nparam-1) {
          if (params[0]) strlcat(params, ",", 1024-strlen(params));
-         snprintf(param, 255, "(TObject*)0x%lx", (Long_t)fObject);
+         snprintf(param, 255, "(TObject*)0x%zx", (size_t)fObject);
          strlcat(params, param, 1024-strlen(params));
       }
 
@@ -253,7 +253,7 @@ const char *TGuiBldMenuDialog::GetParameters()
    // if selected object is the last argument, have to insert it here
    if (selfobjpos == nparam) {
       if (params[0]) strlcat(params, ",", 1024-strlen(params));
-      snprintf(param, 255, "(TObject*)0x%lx", (Long_t)fObject);
+      snprintf(param, 255, "(TObject*)0x%zx", (size_t)fObject);
       strlcat(params, param, 1024-strlen(params));
    }
 
@@ -363,18 +363,15 @@ void TGuiBldMenuDialog::Build()
                        !strncmp(basictype, "int", 3)  ||
                        !strncmp(basictype, "long", 4) ||
                        !strncmp(basictype, "short", 5)) {
-               Long_t ldefval = 0L;
+               Longptr_t ldefval = 0L;
                m->GetterMethod()->Execute(fObject, "", ldefval);
-               snprintf(val, 255, "%li", ldefval);
+               snprintf(val, 255, "%zi", (size_t)ldefval);
             }
 
             // Find out whether we have options ...
 
-            TList *opt;
-            // coverity[returned_pointer]: keep for later use
-            if ((opt = m->GetOptions())) {
+            if (m->GetOptions()) {
                Warning("Dialog", "option menu not yet implemented");
-
             } else {
                // we haven't got options - textfield ...
                Add(argname, val, type);
@@ -400,7 +397,6 @@ void TGuiBldMenuDialog::Build()
    fOK = new TGTextButton(hf, "&OK", 1);
    hf->AddFrame(fOK, l1);
    fWidgets->Add(fOK);
-   height = fOK->GetDefaultHeight();
    width  = TMath::Max(width, fOK->GetDefaultWidth());
 
 /*
@@ -2481,7 +2477,7 @@ Bool_t TGuiBldDragManager::HandleKey(Event_t *event)
                TGFrame *p = (TGFrame*)GetEditableParent(fPimpl->fGrab);
 
                if (p) {
-                  if (p == fBuilder->GetMdiMain()->GetCurrent()) {
+                  if (fBuilder && p == fBuilder->GetMdiMain()->GetCurrent()) {
                      UngrabFrame();
                   } else {
                      SelectFrame(p);
@@ -3335,7 +3331,8 @@ Bool_t TGuiBldDragManager::Save(const char *file)
       if (gVirtualX->InheritsFrom("TGX11")) main->SetIconPixmap("bld_rgb.xpm");
       main->SaveSource(fname.Data(), file ? "keep_names quiet" : "keep_names");
 
-      fBuilder->AddMacro(fname.Data(), img);
+      if (fBuilder)
+         fBuilder->AddMacro(fname.Data(), img);
 
    } else {
       Int_t retval;
@@ -3803,7 +3800,7 @@ void TGuiBldDragManager::CheckTargetUnderGrab()
    }
 
    if (!ok) {
-      ok = CheckTargetAtPoint(x - 1, y + h + 1);
+      CheckTargetAtPoint(x - 1, y + h + 1);
    }
 }
 
@@ -5500,8 +5497,8 @@ void TGuiBldDragManager::DoClassMenu(Int_t id)
 
       if (str.Contains("*DIALOG")) {
          TString str2;
-         str2.Form("((TGuiBldDragManager*)0x%lx)->%s((%s*)0x%lx)", (ULong_t)this, method->GetName(),
-                  fPimpl->fMenuObject->ClassName(), (ULong_t)fPimpl->fMenuObject);
+         str2.Form("((TGuiBldDragManager*)0x%zx)->%s((%s*)0x%zx)", (size_t)this, method->GetName(),
+                  fPimpl->fMenuObject->ClassName(), (size_t)fPimpl->fMenuObject);
          gCling->Calc((char *)str2.Data());
          //delete fFrameMenu;  // suicide (BB)?
          //fFrameMenu = 0;

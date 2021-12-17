@@ -66,7 +66,6 @@ public:
   bool selfNormalized() const override { return true; }
 
   ExtendMode extendMode() const override { return _pdf->extendMode(); }
-  using RooAbsPdf::expectedEvents;
   virtual Double_t expectedEvents(const RooArgSet* nset) const override { return _pdf->expectedEvents(nset); }
 
   /// Forwards to the PDF's implementation.
@@ -94,6 +93,7 @@ public:
 
   std::unique_ptr<ROOT::Math::IntegratorOneDim>& integrator() const;
 
+  static std::unique_ptr<RooAbsPdf> create(RooAbsPdf& pdf, RooAbsData const &data, double precision);
 
 protected:
   double evaluate() const override;

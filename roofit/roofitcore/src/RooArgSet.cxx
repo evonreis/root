@@ -51,7 +51,7 @@
 #include "RooArgList.h"
 #include "RooSentinel.h"
 #include "RooMsgService.h"
-#include "ROOT/RMakeUnique.hxx"
+#include "RooConstVar.h"
 #include "strlcpy.h"
 
 #include <iostream>
@@ -154,10 +154,10 @@ RooArgSet::RooArgSet() :
 /// Constructor from a RooArgList. If the list contains multiple
 /// objects with the same name, only the first is store in the set.
 /// Warning messages will be printed for dropped items.
-RooArgSet::RooArgSet(const RooArgList& list) :
-  RooAbsCollection(list.GetName())
+RooArgSet::RooArgSet(const RooAbsCollection& coll) :
+  RooAbsCollection(coll.GetName())
 {
-  add(list,kTRUE) ; // verbose to catch duplicate errors
+  add(coll,true) ; // verbose to catch duplicate errors
   TRACE_CREATE
 }
 
@@ -245,52 +245,6 @@ RooArgSet::~RooArgSet()
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Add contents of a RooArgList to the set.
-void RooArgSet::processArg(const RooArgList& list) {
-  add(list);
-  if (_name.Length() == 0)
-    _name = list.GetName();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Add element to non-owning set. The operation will fail if
-/// a similarly named object already exists in the set, or
-/// the set is specified to own its elements. Eventual error messages
-/// can be suppressed with the silent flag
-
-Bool_t RooArgSet::add(const RooAbsArg& var, Bool_t silent) 
-{
-  return checkForDup(var,silent)? kFALSE : RooAbsCollection::add(var,silent) ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Add element to an owning set. The operation will fail if
-/// a similarly named object already exists in the set, or
-/// the set is not specified to own its elements. Eventual error messages
-/// can be suppressed with the silent flag
-
-Bool_t RooArgSet::addOwned(RooAbsArg& var, Bool_t silent)
-{
-  return checkForDup(var,silent)? kFALSE : RooAbsCollection::addOwned(var,silent) ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Add clone of specified element to an owning set. If sucessful, the
-/// set will own the clone, not the original. The operation will fail if
-/// a similarly named object already exists in the set, or
-/// the set is not specified to own its elements. Eventual error messages
-/// can be suppressed with the silent flag
-
-RooAbsArg* RooArgSet::addClone(const RooAbsArg& var, Bool_t silent) 
-{
-  return checkForDup(var,silent)? 0 : RooAbsCollection::addClone(var,silent) ;
-}
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Get reference to an element using its name. Named element must exist in set.
@@ -336,177 +290,7 @@ Bool_t RooArgSet::checkForDup(const RooAbsArg& var, Bool_t silent) const
 
 
 
-////////////////////////////////////////////////////////////////////////////////
-/// Get value of a RooAbsReal stored in set with given name. If none is found, value of defVal is returned.
-/// No error messages are printed unless the verbose flag is set
 
-Double_t RooArgSet::getRealValue(const char* name, Double_t defVal, Bool_t verbose) const
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getRealValue(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return defVal ;
-  }
-  RooAbsReal* rar = dynamic_cast<RooAbsReal*>(raa) ;
-  if (!rar) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getRealValue(" << GetName() << ") ERROR object '" << name << "' is not of type RooAbsReal" << endl ;
-    return defVal ;
-  }
-  return rar->getVal() ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Set value of a RooAbsRealLValye stored in set with given name to newVal
-/// No error messages are printed unless the verbose flag is set
-
-Bool_t RooArgSet::setRealValue(const char* name, Double_t newVal, Bool_t verbose) 
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setRealValue(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return kTRUE ;
-  }
-  RooAbsRealLValue* rar = dynamic_cast<RooAbsRealLValue*>(raa) ;
-  if (!rar) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setRealValue(" << GetName() << ") ERROR object '" << name << "' is not of type RooAbsRealLValue" << endl ;
-    return kTRUE;
-  }
-  rar->setVal(newVal) ;
-  return kFALSE ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Get state name of a RooAbsCategory stored in set with given name. If none is found, value of defVal is returned.
-/// No error messages are printed unless the verbose flag is set
-
-const char* RooArgSet::getCatLabel(const char* name, const char* defVal, Bool_t verbose) const
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getCatLabel(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return defVal ;
-  }
-  RooAbsCategory* rac = dynamic_cast<RooAbsCategory*>(raa) ;
-  if (!rac) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getCatLabel(" << GetName() << ") ERROR object '" << name << "' is not of type RooAbsCategory" << endl ;
-    return defVal ;
-  }
-  return rac->getCurrentLabel() ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Set state name of a RooAbsCategoryLValue stored in set with given name to newVal.
-/// No error messages are printed unless the verbose flag is set
-
-Bool_t RooArgSet::setCatLabel(const char* name, const char* newVal, Bool_t verbose) 
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setCatLabel(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return kTRUE ;
-  }
-  RooAbsCategoryLValue* rac = dynamic_cast<RooAbsCategoryLValue*>(raa) ;
-  if (!rac) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setCatLabel(" << GetName() << ") ERROR object '" << name << "' is not of type RooAbsCategory" << endl ;
-    return kTRUE ;
-  }
-  rac->setLabel(newVal) ;
-  return kFALSE ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Get index value of a RooAbsCategory stored in set with given name. If none is found, value of defVal is returned.
-/// No error messages are printed unless the verbose flag is set
-
-Int_t RooArgSet::getCatIndex(const char* name, Int_t defVal, Bool_t verbose) const
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getCatLabel(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return defVal ;
-  }
-  RooAbsCategory* rac = dynamic_cast<RooAbsCategory*>(raa) ;
-  if (!rac) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getCatLabel(" << GetName() << ") ERROR object '" << name << "' is not of type RooAbsCategory" << endl ;
-    return defVal ;
-  }
-  return rac->getCurrentIndex() ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Set index value of a RooAbsCategoryLValue stored in set with given name to newVal.
-/// No error messages are printed unless the verbose flag is set
-
-Bool_t RooArgSet::setCatIndex(const char* name, Int_t newVal, Bool_t verbose) 
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setCatLabel(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return kTRUE ;
-  }
-  RooAbsCategoryLValue* rac = dynamic_cast<RooAbsCategoryLValue*>(raa) ;
-  if (!rac) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setCatLabel(" << GetName() << ") ERROR object '" << name << "' is not of type RooAbsCategory" << endl ;
-    return kTRUE ;
-  }
-  rac->setIndex(newVal) ;
-  return kFALSE ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Get string value of a RooStringVar stored in set with given name. If none is found, value of defVal is returned.
-/// No error messages are printed unless the verbose flag is set
-
-const char* RooArgSet::getStringValue(const char* name, const char* defVal, Bool_t verbose) const
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getStringValue(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return defVal ;
-  }
-  auto ras = dynamic_cast<const RooStringVar*>(raa) ;
-  if (!ras) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::getStringValue(" << GetName() << ") ERROR object '" << name << "' is not of type RooStringVar" << endl ;
-    return defVal ;
-  }
-
-  return ras->getVal() ;
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Set string value of a RooStringVar stored in set with given name to newVal.
-/// No error messages are printed unless the verbose flag is set
-
-Bool_t RooArgSet::setStringValue(const char* name, const char* newVal, Bool_t verbose) 
-{
-  RooAbsArg* raa = find(name) ;
-  if (!raa) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setStringValue(" << GetName() << ") ERROR no object with name '" << name << "' found" << endl ;
-    return kTRUE ;
-  }
-  auto ras = dynamic_cast<RooStringVar*>(raa);
-  if (!ras) {
-    if (verbose) coutE(InputArguments) << "RooArgSet::setStringValue(" << GetName() << ") ERROR object '" << name << "' is not of type RooStringVar" << endl ;
-    return kTRUE ;
-  }
-  ras->setVal(newVal);
-
-  return false;
-}
 
 
 
@@ -862,3 +646,6 @@ Bool_t RooArgSet::isInRange(const char* rangeSpec)
   delete iter ;
   return kFALSE ;
 }
+
+
+void RooArgSet::processArg(double value) { processArg(RooFit::RooConst(value)); }

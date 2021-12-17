@@ -62,11 +62,33 @@ fIntegral(0), fIntegralStatus(kNoInt)
    fAxes.SetOwner();
 }
 
+THnBase::THnBase(const char *name, const char *title, Int_t dim, const Int_t *nbins,
+                 const std::vector<std::vector<double>> &xbins)
+   : TNamed(name, title), fNdimensions(dim), fAxes(dim), fBrowsables(dim), fEntries(0), fTsumw(0), fTsumw2(-1.),
+     fTsumwx(dim), fTsumwx2(dim), fIntegral(0), fIntegralStatus(kNoInt)
+{
+   if (Int_t(xbins.size()) != fNdimensions) {
+      Error("THnBase", "Mismatched number of dimensions %d with number of bin edge vectors %zu", fNdimensions,
+            xbins.size());
+   }
+   for (Int_t i = 0; i < fNdimensions; ++i) {
+      if (Int_t(xbins[i].size()) != (nbins[i] + 1)) {
+         Error("THnBase", "Mismatched number of bins %d with number of bin edges %zu", nbins[i], xbins[i].size());
+      }
+      TAxis *axis = new TAxis(nbins[i], xbins[i].data());
+      axis->SetName(TString::Format("axis%d", i));
+      fAxes.AddAtAndExpand(axis, i);
+   }
+   SetTitle(title);
+   fAxes.SetOwner();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Destruct a THnBase
 
 THnBase::~THnBase() {
-   if (fIntegralStatus != kNoInt) delete [] fIntegral;
+   if (fIntegralStatus != kNoInt)
+      fIntegral.clear();
 }
 
 
@@ -398,7 +420,7 @@ void THnBase::GetRandom(Double_t *rand, Bool_t subBinRandom /* = kTRUE */)
 
    // generate a random bin
    Double_t p = gRandom->Rndm();
-   Long64_t idx = TMath::BinarySearch(GetNbins() + 1, fIntegral, p);
+   Long64_t idx = TMath::BinarySearch(GetNbins() + 1, fIntegral.data(), p);
    const Int_t nStaticBins = 40;
    Int_t bin[nStaticBins];
    Int_t* pBin = bin;
@@ -1154,7 +1176,7 @@ void THnBase::ResetBase(Option_t * /*option = ""*/)
    fTsumw = 0.;
    fTsumw2 = -1.;
    if (fIntegralStatus != kNoInt) {
-      delete [] fIntegral;
+      fIntegral.clear();
       fIntegralStatus = kNoInt;
    }
 }
@@ -1166,7 +1188,7 @@ Double_t THnBase::ComputeIntegral()
 {
    // delete old integral
    if (fIntegralStatus != kNoInt) {
-      delete [] fIntegral;
+      fIntegral.clear();
       fIntegralStatus = kNoInt;
    }
 
@@ -1177,7 +1199,7 @@ Double_t THnBase::ComputeIntegral()
    }
 
    // allocate integral array
-   fIntegral = new Double_t [GetNbins() + 1];
+   fIntegral.resize(GetNbins() + 1);
    fIntegral[0] = 0.;
 
    // fill integral array with contents of regular bins (non over/underflow)
@@ -1206,7 +1228,7 @@ Double_t THnBase::ComputeIntegral()
    // check sum of weights
    if (fIntegral[GetNbins()] == 0.) {
       Error("ComputeIntegral", "No hits in regular bins (non over/underflow).");
-      delete [] fIntegral;
+      fIntegral.clear();
       return 0.;
    }
 
@@ -1338,7 +1360,7 @@ void THnBase::Print(Option_t* options) const
    Bool_t optStat    = options && (strchr(options, 'S') || (strchr(options, 's')));
    Bool_t optContent = options && (strchr(options, 'C') || (strchr(options, 'c')));
 
-   Printf("%s (*0x%lx): \"%s\" \"%s\"", IsA()->GetName(), (unsigned long)this, GetName(), GetTitle());
+   Printf("%s (*0x%zx): \"%s\" \"%s\"", IsA()->GetName(), (size_t)this, GetName(), GetTitle());
    Printf("  %d dimensions, %g entries in %lld filled bins", GetNdimensions(), GetEntries(), GetNbins());
 
    if (optAxis) {

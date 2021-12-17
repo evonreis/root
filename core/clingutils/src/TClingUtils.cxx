@@ -1790,7 +1790,7 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
    }
 
    if (HasIOConstructor(decl, args, ctorTypes, interp)) {
-      finalString << "   static void *new_" << mappedname.c_str() << "(void *p = 0);" << "\n";
+      finalString << "   static void *new_" << mappedname.c_str() << "(void *p = nullptr);" << "\n";
 
       if (args.size()==0 && NeedDestructor(decl, interp))
       {
@@ -1902,11 +1902,11 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
 
    finalString << "   static TGenericClassInfo *GenerateInitInstanceLocal(const " << csymbol << "*)" << "\n" << "   {" << "\n";
 
-   finalString << "      " << csymbol << " *ptr = 0;" << "\n";
+   finalString << "      " << csymbol << " *ptr = nullptr;" << "\n";
 
    //fprintf(fp, "      static ::ROOT::ClassInfo< %s > \n",classname.c_str());
    if (ClassInfo__HasMethod(decl,"IsA",interp) ) {
-      finalString << "      static ::TVirtualIsAProxy* isa_proxy = new ::TInstrumentedIsAProxy< "  << csymbol << " >(0);" << "\n";
+      finalString << "      static ::TVirtualIsAProxy* isa_proxy = new ::TInstrumentedIsAProxy< "  << csymbol << " >(nullptr);" << "\n";
    }
    else {
       finalString << "      static ::TVirtualIsAProxy* isa_proxy = new ::TIsAProxy(typeid(" << csymbol << "));" << "\n";
@@ -2013,6 +2013,7 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
          case ROOT::kSTLvector:
          case ROOT::kSTLlist:
          case ROOT::kSTLdeque:
+         case ROOT::kROOTRVec:
             methodTCP="Pushback";
             break;
          case ROOT::kSTLforwardlist:
@@ -2061,17 +2062,17 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
    /////////////////////////////////////////////////////////////////////////////
 
    if( (rulesIt1 != ROOT::gReadRules.end() && rulesIt1->second.size()>0) || (rulesIt2 != ROOT::gReadRawRules.end()  && rulesIt2->second.size()>0) ) {
-      finalString << "\n" << "      ROOT::Internal::TSchemaHelper* rule;" << "\n";
+      finalString << "\n" << "      ::ROOT::Internal::TSchemaHelper* rule;" << "\n";
    }
 
    if( rulesIt1 != ROOT::gReadRules.end() ) {
-      finalString << "\n" << "      // the io read rules" << "\n" << "      std::vector<ROOT::Internal::TSchemaHelper> readrules(" << rulesIt1->second.size() << ");" << "\n";
+      finalString << "\n" << "      // the io read rules" << "\n" << "      std::vector<::ROOT::Internal::TSchemaHelper> readrules(" << rulesIt1->second.size() << ");" << "\n";
       ROOT::WriteSchemaList( rulesIt1->second, "readrules", finalString );
       finalString << "      instance.SetReadRules( readrules );" << "\n";
    }
 
    if( rulesIt2 != ROOT::gReadRawRules.end() ) {
-      finalString << "\n" << "      // the io read raw rules" << "\n" << "      std::vector<ROOT::Internal::TSchemaHelper> readrawrules(" << rulesIt2->second.size() << ");" << "\n";
+      finalString << "\n" << "      // the io read raw rules" << "\n" << "      std::vector<::ROOT::Internal::TSchemaHelper> readrawrules(" << rulesIt2->second.size() << ");" << "\n";
       ROOT::WriteSchemaList( rulesIt2->second, "readrawrules", finalString );
       finalString << "      instance.SetReadRawRules( readrawrules );" << "\n";
    }
@@ -2080,20 +2081,20 @@ void ROOT::TMetaUtils::WriteClassInit(std::ostream& finalString,
 
    if (!isStdNotString && !ROOT::TMetaUtils::hasOpaqueTypedef(cl, interp, normCtxt)) {
       // The GenerateInitInstance for STL are not unique and should not be externally accessible
-      finalString << "   TGenericClassInfo *GenerateInitInstance(const " << csymbol << "*)" << "\n" << "   {\n      return GenerateInitInstanceLocal((" << csymbol << "*)0);\n   }" << "\n";
+      finalString << "   TGenericClassInfo *GenerateInitInstance(const " << csymbol << "*)" << "\n" << "   {\n      return GenerateInitInstanceLocal((" << csymbol << "*)nullptr);\n   }" << "\n";
    }
 
    finalString << "   // Static variable to force the class initialization" << "\n";
    // must be one long line otherwise UseDummy does not work
 
 
-   finalString << "   static ::ROOT::TGenericClassInfo *_R__UNIQUE_DICT_(Init) = GenerateInitInstanceLocal((const " << csymbol << "*)0x0); R__UseDummy(_R__UNIQUE_DICT_(Init));" << "\n";
+   finalString << "   static ::ROOT::TGenericClassInfo *_R__UNIQUE_DICT_(Init) = GenerateInitInstanceLocal((const " << csymbol << "*)nullptr); R__UseDummy(_R__UNIQUE_DICT_(Init));" << "\n";
 
    if (!ClassInfo__HasMethod(decl,"Dictionary",interp) || IsTemplate(*decl)) {
       finalString <<  "\n" << "   // Dictionary for non-ClassDef classes" << "\n"
                   << "   static TClass *" << mappedname << "_Dictionary() {\n"
                   << "      TClass* theClass ="
-                  << "::ROOT::GenerateInitInstanceLocal((const " << csymbol << "*)0x0)->GetClass();\n"
+                  << "::ROOT::GenerateInitInstanceLocal((const " << csymbol << "*)nullptr)->GetClass();\n"
                   << "      " << mappedname << "_TClassManip(theClass);\n";
       finalString << "   return theClass;\n";
       finalString << "   }\n\n";
@@ -3279,14 +3280,12 @@ llvm::StringRef ROOT::TMetaUtils::DataMemberInfo__ValidArrayIndex(const clang::D
 
 void ROOT::TMetaUtils::GetCppName(std::string &out, const char *in)
 {
-   out.resize(strlen(in)*2);
-   unsigned int i=0,j=0,c;
-   while((c=in[i])) {
-      if (out.capacity() < (j+3)) {
-         out.resize(2*j+3);
-      }
+   unsigned int i = 0;
+   char c;
+   out.clear();
+   while((c = in[i++])) {
       const char *repl = nullptr;
-      switch(c) { // We resized the underlying buffer if needed
+      switch(c) {
          case '+': repl = "pL"; break;
          case '-': repl = "mI"; break;
          case '*': repl = "mU"; break;
@@ -3313,19 +3312,17 @@ void ROOT::TMetaUtils::GetCppName(std::string &out, const char *in)
          case '@': repl = "aT"; break;
          case '\'': repl = "sQ"; break;
          case '\\': repl = "fI"; break;
-         default: out[j++]=c; break;
       }
-      if (repl) {
-         strlcpy(const_cast<char*>(out.data())+j, repl, out.capacity()-j);
-         j+=2;
-      }
-      ++i;
+      if (repl)
+         out.append(repl);
+      else
+         out.push_back(c);
    }
-   out.resize(j);
 
    // Remove initial numbers if any
-   std::size_t firstNonNumber = out.find_first_not_of("0123456789");
-   out.replace(0,firstNonNumber,"");
+   auto firstNonNumber = out.find_first_not_of("0123456789");
+   if (firstNonNumber != std::string::npos)
+      out.replace(0,firstNonNumber,"");
 }
 
 static clang::SourceLocation
@@ -3874,8 +3871,10 @@ static void KeepNParams(clang::QualType& normalizedType,
    const clang::ClassTemplateDecl* ctdWithDefaultArgs = ctd;
    for (const RedeclarableTemplateDecl* rd: ctdWithDefaultArgs->redecls()) {
       clang::TemplateParameterList* tpl = rd->getTemplateParameters();
-      if (tpl->getMinRequiredArguments () < tpl->size())
+      if (tpl->getMinRequiredArguments () < tpl->size()) {
          ctdWithDefaultArgs = llvm::dyn_cast<clang::ClassTemplateDecl>(rd);
+         break;
+      }
    }
 
    if (!ctdWithDefaultArgs) {
@@ -4487,7 +4486,13 @@ ROOT::ESTLType ROOT::TMetaUtils::IsSTLCont(const clang::RecordDecl &cl)
    //                           For example: vector<deque<int>> has answer -1
 
    if (!IsStdClass(cl)) {
-      return ROOT::kNotSTL;
+      auto *nsDecl = llvm::dyn_cast<clang::NamespaceDecl>(cl.getDeclContext());
+      if (cl.getName() != "RVec" || nsDecl == nullptr || nsDecl->getName() != "VecOps")
+         return ROOT::kNotSTL;
+
+      auto *parentNsDecl = llvm::dyn_cast<clang::NamespaceDecl>(cl.getDeclContext()->getParent());
+      if (parentNsDecl == nullptr || parentNsDecl->getName() != "ROOT")
+         return ROOT::kNotSTL;
    }
 
    return STLKind(cl.getName());
@@ -4840,7 +4845,7 @@ ROOT::ESTLType ROOT::TMetaUtils::STLKind(const llvm::StringRef type)
 {
    static const char *stls[] =                  //container names
       {"any","vector","list", "deque","map","multimap","set","multiset","bitset",
-         "forward_list","unordered_set","unordered_multiset","unordered_map","unordered_multimap",0};
+         "forward_list","unordered_set","unordered_multiset","unordered_map","unordered_multimap", "RVec", 0};
    static const ROOT::ESTLType values[] =
       {ROOT::kNotSTL, ROOT::kSTLvector,
        ROOT::kSTLlist, ROOT::kSTLdeque,
@@ -4850,6 +4855,7 @@ ROOT::ESTLType ROOT::TMetaUtils::STLKind(const llvm::StringRef type)
        ROOT::kSTLforwardlist,
        ROOT::kSTLunorderedset, ROOT::kSTLunorderedmultiset,
        ROOT::kSTLunorderedmap, ROOT::kSTLunorderedmultimap,
+       ROOT::kROOTRVec,
        ROOT::kNotSTL
       };
    //              kind of stl container

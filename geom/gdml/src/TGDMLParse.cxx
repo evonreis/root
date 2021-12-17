@@ -672,7 +672,7 @@ TString TGDMLParse::GetScale(const char *unit)
 
    if (strcmp(unit, "mm") == 0) {
       retunit = "0.1";
-   } else if (strcmp(unit, "milimeter") == 0) {
+   } else if (strcmp(unit, "millimeter") == 0 || strcmp(unit, "milimeter") == 0) {
       retunit = "0.1";
    } else if (strcmp(unit, "cm") == 0) {
       retunit = "1.0";
@@ -718,7 +718,7 @@ Double_t TGDMLParse::GetScaleVal(const char *sunit)
    TString unit(sunit);
    unit.ToLower();
 
-   if ((unit == "mm") || (unit == "milimeter")) {
+   if ((unit == "mm") || (unit == "millimeter") || (unit == "milimeter")) {
      retunit = (def_units == TGeoManager::kRootUnits) ? 0.1 : 1.0;
    } else if ((unit == "cm") || (unit == "centimeter")) {
      retunit = (def_units == TGeoManager::kRootUnits) ? 1.0 : 10.0;
@@ -816,7 +816,7 @@ Double_t TGDMLParse::Value(const char *svalue) const
    TFormula f("TFormula", expanded.c_str());
 
    // Tell the TFormula about every parameter we know about
-   for (auto it : fconsts)
+   for (auto &it : fconsts)
       f.SetParameter(it.first.c_str(), it.second);
 
    val = f.Eval(0);

@@ -33,9 +33,9 @@ struct ToolBarData_t {
 class TGToolBar : public TGCompositeFrame {
 
 protected:
-   TList   *fPictures;      // list of pictures that should be freed
-   TList   *fTrash;         // list of buttons and layout hints to be deleted
-   TMap    *fMapOfButtons;  // map of button/id pairs in this group
+   TList   *fPictures;      ///< list of pictures that should be freed
+   TList   *fTrash;         ///< list of buttons and layout hints to be deleted
+   TMap    *fMapOfButtons;  ///< map of button/id pairs in this group
 
 private:
    TGToolBar(const TGToolBar&) = delete;
@@ -53,8 +53,8 @@ public:
    virtual void ChangeIcon(ToolBarData_t *button, const char *new_icon);
    virtual void Cleanup();
    virtual TGButton *GetButton(Int_t id) const;
-   virtual Long_t    GetId(TGButton *button) const;
-   virtual void      SetId(TGButton *button, Long_t id);
+   virtual Longptr_t GetId(TGButton *button) const;
+   virtual void      SetId(TGButton *button, Longptr_t id);
 
    virtual void ButtonPressed();
    virtual void ButtonReleased();

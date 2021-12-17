@@ -71,14 +71,16 @@ ROOT_EXECUTABLE(guitest guitest.cxx LIBRARIES RIO Gui Gpad Hist)
 #ROOT_ADD_TEST(test-hsimple COMMAND hsimple)
 
 #---invalid pointer checks---------------------------------------------------------------------
-ROOT_ADD_TEST(test-check-nullptr
-  COMMAND ${ROOT_root_CMD} -b -q -l -e "int*ptr=(int*)0" -e "*ptr"
-  PASSREGEX "dereference null pointer")
+if(NOT (APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES arm64) OR M1_BROKEN_TESTS)
+  ROOT_ADD_TEST(test-check-nullptr
+    COMMAND ${ROOT_root_CMD} -b -q -l -e "int*ptr=(int*)0" -e "*ptr"
+    PASSREGEX "dereference null pointer")
 
-if(NOT MSVC OR win_broken_tests)
-  ROOT_ADD_TEST(test-check-invalidptr
-    COMMAND ${ROOT_root_CMD} -b -q -l -e "int*ptr=(int*)1" -e "*ptr"
-    PASSREGEX "invalid memory address")
+  if(NOT MSVC OR win_broken_tests)
+    ROOT_ADD_TEST(test-check-invalidptr
+      COMMAND ${ROOT_root_CMD} -b -q -l -e "int*ptr=(int*)1" -e "*ptr"
+      PASSREGEX "invalid memory address")
+  endif()
 endif()
 
 #--minexam-------------------------------------------------------------------------------------
@@ -244,6 +246,12 @@ if(ROOT_roofit_FOUND)
   ROOT_ADD_TEST(test-stressroofit-interpreted COMMAND ${ROOT_root_CMD} -b -q -l ${CMAKE_CURRENT_SOURCE_DIR}/stressRooFit.cxx
                 FAILREGEX "FAILED|Error in" DEPENDS test-stressroofit )
 
+  # Test that the user can still include RooMath.h themselves from the
+  # interpreter. We test this case explicitely, because RooMath.h was moved
+  # from roofit/roofitcore to roofit/batchcompute, which can cause redefinition
+  # problems.
+  ROOT_ADD_TEST(test-roofit-includingRooMath COMMAND ${ROOT_root_CMD} -b -q -l -e "#include\ <RooMath.h>")
+
   add_subdirectory(fit)
 endif()
 
@@ -358,14 +366,6 @@ if(MSVC)
   set_property(TARGET TFormulaTests APPEND_STRING PROPERTY LINK_FLAGS "/STACK:4000000")
 endif()
 ROOT_ADD_TEST(test-TFormulaTests COMMAND TFormulaTests FAILREGEX "FAILED|Error in")
-
-#--TBB basic test----------------------------------------------------------------------------------
-if(ROOT_imt_FOUND)
-  include_directories(SYSTEM ${TBB_INCLUDE_DIRS})
-  ROOT_EXECUTABLE(testTBB testTBB.cxx LIBRARIES ${TBB_LIBRARIES} BUILTINS TBB)
-  set_target_properties(testTBB PROPERTIES COMPILE_FLAGS "${TBB_CXXFLAGS}")
-  ROOT_ADD_TEST(test-TBB COMMAND testTBB FAILREGEX "FAILED|Error in")
-endif()
 
 #--Vc basic test-----------------------------------------------------------------------------------
 if(ROOT_vc_FOUND)

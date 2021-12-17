@@ -13,7 +13,7 @@
  * \f]
  *
  * The \f$ \gamma_i \f$ can therefore be used to parametrise statistical uncertainties of the histogram
- * template. In conjuction with a constraint term, this can be used to implement the Barlow-Beeston method.
+ * template. In conjunction with a constraint term, this can be used to implement the Barlow-Beeston method.
  * The constraint can be implemented using RooHistConstraint.
  *
  * See also the tutorial rf709_BarlowBeeston.C
@@ -264,7 +264,6 @@ Double_t RooParamHistFunc::analyticalIntegralWN(Int_t code, const RooArgSet* /*n
 
   auto getBinScale = [&](int iBin){ return static_cast<const RooAbsReal&>(_p[iBin]).getVal(); };
 
-  auto integrationSet = _dh.get();
   RooArgSet sliceSet{};
-  return const_cast<RooDataHist&>(_dh).sum(*integrationSet, sliceSet, true, false, ranges, getBinScale);
+  return const_cast<RooDataHist&>(_dh).sum(_x, sliceSet, true, false, ranges, getBinScale);
 }

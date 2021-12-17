@@ -20,7 +20,8 @@
  * and a binned distribution.
  * When RooFit is used to fit binned data, and the PDF is continuous, it takes the probability density
  * at the bin centre as a proxy for the probability averaged (integrated) over the entire bin. This is
- * correct only if the second derivative of the function vanishes, though.
+ * correct only if the second derivative of the function vanishes, though. This is shown in the plots
+ * below.
  *
  * For PDFs that have larger curvatures, the RooBinSamplingPdf can be used. It integrates the PDF in each
  * bin using an adaptive integrator. This usually requires 21 times more function evaluations, but significantly
@@ -28,7 +29,6 @@
  * using integrator(). This can be used to change the integration rules, so less/more function evaluations are
  * performed. The target precision of the integrator can be set in the constructor.
  *
- * \note This feature is currently limited to one-dimensional PDFs.
  *
  * ### How to use it
  * There are two ways to use this class:
@@ -38,7 +38,9 @@
  *   binSampler.fitTo(data);
  * ```
  *   When a PDF is wrapped with a RooBinSamplingPDF, just use the bin sampling PDF instead of the original one for fits
- *   or plotting etc. Note that the binning will be taken from the observable.
+ *   or plotting etc.
+ *   \note The binning will be taken from the observable. Make sure that this binning is the same as the one of the dataset that should be fit.
+ *   Use RooRealVar::setBinning() to adapt it.
  * - Instruct test statistics to carry out this wrapping automatically:
  * ```
  *   pdf.fitTo(data, IntegrateBins(<precision>));
@@ -48,8 +50,8 @@
  *   - `precision < 0.`: None of the PDFs are touched, bin sampling is off.
  *   - `precision = 0.`: Continuous PDFs that are fit to a RooDataHist are wrapped into a RooBinSamplingPdf. The target precision
  *      forwarded to the integrator is 1.E-4 (the default argument of the constructor).
- *   - `precision > 0.`: All continuous PDFs are automatically wrapped into a RooBinSamplingPdf. The `'precision'` is used for all
- *      integrators.
+ *   - `precision > 0.`: All continuous PDFs are automatically wrapped into a RooBinSamplingPdf, regardless of what data they are
+ *      fit to (see next paragraph). The same `'precision'` is used for all integrators.
  *
  * ### Simulating a binned fit using RooDataSet
  *   Some frameworks use unbinned data (RooDataSet) to simulate binned datasets. By adding one entry for each bin centre with the
@@ -71,14 +73,17 @@
  *   \see RooAbsPdf::fitTo()
  *   \see IntegrateBins()
  *
+ *   \note This feature is currently limited to one-dimensional PDFs.
  *
- * \htmlonly <style>div.image img[src="RooBinSamplingPdf_OFF.png"]{width:15cm;}</style> \endhtmlonly
- * \htmlonly <style>div.image img[src="RooBinSamplingPdf_ON.png" ]{width:15cm;}</style> \endhtmlonly
+ *
+ * \htmlonly <style>div.image img[src="RooBinSamplingPdf_OFF.png"]{width:12cm;}</style> \endhtmlonly
+ * \htmlonly <style>div.image img[src="RooBinSamplingPdf_ON.png" ]{width:12cm;}</style> \endhtmlonly
  * <table>
- * <tr><td>
- * \image html RooBinSamplingPdf_OFF.png "Binned fit without RooBinSamplingPdf"
- * <td>
- * \image html RooBinSamplingPdf_ON.png "Binned fit with RooBinSamplingPdf"
+ * <tr><th> Binned fit without %RooBinSamplingPdf    <th> Binned fit with %RooBinSamplingPdf   </td></tr>
+ * <tr><td> \image html RooBinSamplingPdf_OFF.png ""
+ *   </td>
+ * <td> \image html RooBinSamplingPdf_ON.png ""
+ *   </td></tr>
  * </table>
  *
  */
@@ -89,6 +94,9 @@
 #include "RooHelpers.h"
 #include "RooRealBinding.h"
 #include "RunContext.h"
+#include "RooRealVar.h"
+#include "RooGlobalFunc.h"
+#include "RooDataHist.h"
 
 #include "Math/Integrator.h"
 
@@ -151,7 +159,7 @@ double RooBinSamplingPdf::evaluate() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Integrate the PDF over all its bins, and return a batch with those values.
-/// \param[in/out] evalData Struct with evaluation data.
+/// \param[in,out] evalData Struct with evaluation data.
 /// \param[in] normSet Normalisation set that's used to evaluate the PDF.
 RooSpan<double> RooBinSamplingPdf::evaluateSpan(RooBatchCompute::RunContext& evalData, const RooArgSet* normSet) const {
   // Retrieve binning, which we need to compute the probabilities
@@ -256,17 +264,25 @@ std::list<double>* RooBinSamplingPdf::plotSamplingHint(RooAbsRealLValue& obs, Do
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return reference to a unique_ptr holding the integrator that's used to sample the bins.
+/// Direct access to the unique_ptr holding the integrator that's used to sample the bins.
 /// This can be used to change options such as sampling accuracy or to entirely exchange the integrator.
-/// \see ROOT::Math::IntegratorOneDim::SetOptions to alter integration options.
-/// \note When integration options are altered, these changes are not saved to files.
+///
+/// #### Example: Use the 61-point Gauss-Kronrod integration rule
+/// ```{.cpp}
+///   ROOT::Math::IntegratorOneDimOptions intOptions = pdf.integrator()->Options();
+///   intOptions.SetNPoints(6); // 61-point integration rule
+///   intOptions.SetRelTolerance(1.E-9); // Smaller tolerance -> more subdivisions
+///   pdf.integrator()->SetOptions(intOptions);
+/// ```
+/// \see ROOT::Math::IntegratorOneDim::SetOptions for more details on integration options.
+/// \note When RooBinSamplingPdf is loaded from files, integrator options will fall back to the default values.
 std::unique_ptr<ROOT::Math::IntegratorOneDim>& RooBinSamplingPdf::integrator() const {
   if (!_integrator) {
     _integrator.reset(new ROOT::Math::IntegratorOneDim(*this,
         ROOT::Math::IntegrationOneDim::kADAPTIVE, // GSL Integrator. Will really get it only if MathMore enabled.
         -1., _relEpsilon, // Abs epsilon = default, rel epsilon set by us.
         0, // We don't limit the sub-intervals. Steer run time via _relEpsilon.
-        2 // This should be ROOT::Math::Integration::kGAUSS21, but this is in MathMore, so cannot include.
+        2 // This should read ROOT::Math::Integration::kGAUSS21, but this is in MathMore, so we cannot include it here.
         ));
   }
 
@@ -291,3 +307,51 @@ double RooBinSamplingPdf::integrate(const RooArgSet* normSet, double low, double
   return integrator()->Integral(low, high);
 }
 
+
+/// Creates a wrapping RooBinSamplingPdf if appropriate.
+/// \param[in] pdf The input pdf.
+/// \param[in] data The dataset to be used in the fit, used to figure out the
+///            observables and whether the dataset is binned.
+/// \param[in] precision Precision argument for all created RooBinSamplingPdfs.
+std::unique_ptr<RooAbsPdf> RooBinSamplingPdf::create(RooAbsPdf& pdf, RooAbsData const &data, double precision) {
+  if (precision < 0.)
+    return nullptr;
+
+  std::unique_ptr<RooArgSet> funcObservables( pdf.getObservables(data) );
+  const bool oneDimAndBinned = (1 == std::count_if(funcObservables->begin(), funcObservables->end(), [](const RooAbsArg* arg) {
+    auto var = dynamic_cast<const RooRealVar*>(arg);
+    return var && var->numBins() > 1;
+  }));
+
+  if (!oneDimAndBinned) {
+    if (precision > 0.) {
+      oocoutE(&pdf, Fitting)
+          << "Integration over bins was requested, but this is currently only implemented for 1-D fits." << std::endl;
+    }
+    return nullptr;
+  }
+
+  // Find the real-valued observable. We don't care about categories.
+  auto theObs = std::find_if(funcObservables->begin(), funcObservables->end(), [](const RooAbsArg* arg){
+    return dynamic_cast<const RooAbsRealLValue*>(arg);
+  });
+  assert(theObs != funcObservables->end());
+
+  std::unique_ptr<RooAbsPdf> newPdf;
+
+  if (precision > 0.) {
+    // User forced integration. Let just apply it.
+    newPdf = std::make_unique<RooBinSamplingPdf>(
+        (std::string(pdf.GetName()) + "_binSampling").c_str(), pdf.GetTitle(),
+        *static_cast<RooAbsRealLValue *>(*theObs), pdf, precision);
+  } else if (dynamic_cast<RooDataHist const *>(&data) != nullptr &&
+             precision == 0. && !pdf.isBinnedDistribution(*data.get())) {
+    // User didn't forbid integration, and it seems appropriate with a
+    // RooDataHist.
+    newPdf = std::make_unique<RooBinSamplingPdf>(
+        (std::string(pdf.GetName()) + "_binSampling").c_str(), pdf.GetTitle(),
+        *static_cast<RooAbsRealLValue *>(*theObs), pdf);
+  }
+
+  return newPdf;
+}

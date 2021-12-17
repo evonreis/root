@@ -23,6 +23,9 @@
 #include "TBaseClass.h"
 
 #include <sstream>
+#include <regex>
+
+#include <nlohmann/json.hpp>
 
 using namespace ROOT::Experimental;
 
@@ -96,7 +99,7 @@ void REveDataItemList::ItemChanged(Int_t idx)
 void REveDataItemList::FillImpliedSelectedSet( Set_t& impSelSet)
 {
    /*
-   printf("REveDataCollection::FillImpliedSelectedSet colecction setsize %zu\n",   RefSelectedSet().size());
+   printf("REveDataItemList::FillImpliedSelectedSet colecction setsize %zu\n",   RefSelectedSet().size());
    for (auto x : RefSelectedSet())
       printf("%d \n", x);
    */
@@ -141,6 +144,28 @@ Bool_t REveDataItemList::SetRnrState(Bool_t iRnrSelf)
    return ret;
 }
 
+
+//______________________________________________________________________________
+void REveDataItemList::ProcessSelectionStr(ElementId_t id, bool multi, bool secondary, const char* secondary_idcs)
+{
+   static const REveException eh("REveDataItemList::ProcessSelectionStr ");
+   static const std::regex comma_re("\\s*,\\s*", std::regex::optimize);
+   std::string   str(secondary_idcs);
+   std::set<int> sis;
+   std::sregex_token_iterator itr(str.begin(), str.end(), comma_re, -1);
+   std::sregex_token_iterator end;
+
+   try {
+      while (itr != end) sis.insert(std::stoi(*itr++));
+   }
+   catch (const std::invalid_argument& ia) {
+      throw eh + "invalid secondary index argument '" + *itr + "' - must be int.";
+   }
+
+   ProcessSelection(id, multi, secondary, sis);
+}
+
+
 //______________________________________________________________________________
 void REveDataItemList::ProcessSelection(ElementId_t selectionId, bool multi, bool secondary, const std::set<int>& secondary_idcs)
 {
@@ -172,10 +197,10 @@ std::string REveDataItemList::GetHighlightTooltip(const std::set<int>& secondary
    {
       idx = z;
       data = col->GetDataPtr(idx);
-      res +=  Form("%s %d",  name.c_str(), idx);
+      res +=  std::string(TString::Format("%s %d",  name.c_str(), idx));
       for (auto &t : fTooltipExpressions) {
-         std::string eval = t.fTooltipFunction.EvalExpr(data);
-         res +=  Form("\n  %s = %s", t.fTooltipTitle.c_str(), eval.c_str());
+         std::string eval = t->fTooltipFunction.EvalExpr(data);
+         res +=  std::string(TString::Format("\n  %s = %s", t->fTooltipTitle.c_str(), eval.c_str()));
       }
       res += "\n";
    }
@@ -183,15 +208,21 @@ std::string REveDataItemList::GetHighlightTooltip(const std::set<int>& secondary
 }
 
 //______________________________________________________________________________
-void REveDataItemList::AddTooltipExpression(const std::string &title, const std::string &expr)
+void REveDataItemList::AddTooltipExpression(const std::string &title, const std::string &expr, bool init)
 {
-   TTip tt;
-   tt.fTooltipTitle = title;
-   tt.fTooltipFunction.SetPrecision(2);
-   auto col = dynamic_cast<REveDataCollection*>(fMother);
+   fTooltipExpressions.push_back(std::unique_ptr<TTip>(new TTip()));
+   TTip *tt = fTooltipExpressions.back().get();
+
+   tt->fTooltipTitle = title;
+   tt->fTooltipFunction.SetPrecision(2);
+   auto col = dynamic_cast<REveDataCollection *>(fMother);
    auto icls = col->GetItemClass();
-   tt.fTooltipFunction.SetExpressionAndType(expr, REveDataColumn::FT_Double, icls);
-   fTooltipExpressions.push_back(tt);
+   tt->fTooltipFunction.SetExpressionAndType(expr, REveDataColumn::FT_Double, icls);
+
+   if (init) {
+      auto re = tt->fTooltipFunction.GetFunctionExpressionString();
+      gROOT->ProcessLine(re.c_str());
+   }
 }
 
 //______________________________________________________________________________
@@ -245,7 +276,7 @@ void REveDataCollection::AddItem(void *data_ptr, const std::string& /*n*/, const
 
 //------------------------------------------------------------------------------
 
-void REveDataCollection::SetFilterExpr(const TString& filter)
+void REveDataCollection::SetFilterExpr(const char* filter)
 {
    static const REveException eh("REveDataCollection::SetFilterExpr ");
 
@@ -256,7 +287,7 @@ void REveDataCollection::SetFilterExpr(const TString& filter)
    std::stringstream s;
    s << "*((std::function<bool(" << fItemClass->GetName() << "*)>*)" << std::hex << std::showbase << (size_t)&fFilterFoo
      << ") = [](" << fItemClass->GetName() << "* p){" << fItemClass->GetName() << " &i=*p; return ("
-     << fFilterExpr.Data() << "); }";
+     << fFilterExpr.Data() << "); };";
 
    // printf("%s\n", s.Data());
    try {
@@ -266,12 +297,15 @@ void REveDataCollection::SetFilterExpr(const TString& filter)
    }
    catch (const std::exception &exc)
    {
-      std::cerr << "EveDataCollection::SetFilterExpr" << exc.what();
+      R__LOG_ERROR(REveLog()) << "EveDataCollection::SetFilterExpr" << exc.what();
    }
 }
 
 void REveDataCollection::ApplyFilter()
 {
+   if (!fFilterFoo)
+      return;
+   
    Ids_t ids;
    int idx = 0;
    for (auto &ii : fItemList->fItems)
@@ -335,7 +369,7 @@ void  REveDataCollection::StreamPublicMethods(nlohmann::json &j) const
                ms += " ";
                ms += ma->GetName();
             }
-            char* entry = Form("i.%s(%s)",meth->GetName(),ms.Data());
+            std::string entry(TString::Format("i.%s(%s)",meth->GetName(),ms.Data()).Data());
             nlohmann::json jm ;
             jm["f"] = entry;
             jm["r"] = meth->GetReturnTypeName();

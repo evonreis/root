@@ -74,7 +74,6 @@ ClassImp(TTreeInput);
    fOk = new TGTextButton(hf, "&Ok", 1);
    fOk->Associate(this);
    hf->AddFrame(fOk, new TGLayoutHints(kLHintsCenterY | kLHintsExpandX, 5, 5, 0, 0));
-   height = fOk->GetDefaultHeight();
    width  = TMath::Max(width, fOk->GetDefaultWidth());
 
    fCancel = new TGTextButton(hf, "&Cancel", 2);
@@ -131,7 +130,7 @@ TTreeInput::~TTreeInput()
 ////////////////////////////////////////////////////////////////////////////////
 /// Handle button and text enter events
 
-Bool_t TTreeInput::ProcessMessage(Long_t msg, Long_t parm1, Long_t)
+Bool_t TTreeInput::ProcessMessage(Longptr_t msg, Longptr_t parm1, Longptr_t)
 {
    switch (GET_MSG(msg)) {
       case kC_COMMAND:

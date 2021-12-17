@@ -71,38 +71,32 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
          return rect;
       }
 
-      let elem = pad, fp = this.getFramePainter();
-      if (can3d === 0) elem = this.getCanvSvg();
+      let fp = this.getFramePainter(), pp = this.getPadPainter(), size;
 
-      let size = { x: 0, y: 0, width: 100, height: 100, clname: clname, can3d: can3d };
-
-      if (fp && !fp.mode3d) {
-         elem = this.getFrameSvg();
-         size.x = elem.property("draw_x");
-         size.y = elem.property("draw_y");
+      if (fp && fp.mode3d && (can3d > 0)) {
+         size = fp.getFrameRect();
+      } else {
+         let elem = (can3d > 0) ? pad : this.getCanvSvg();
+         size = { x: 0, y: 0, width: elem.property("draw_width"), height: elem.property("draw_height") };
+         if (fp && !fp.mode3d) {
+            elem = this.getFrameSvg();
+            size.x = elem.property("draw_x");
+            size.y = elem.property("draw_y");
+         }
       }
 
-      size.width = elem.property("draw_width");
-      size.height = elem.property("draw_height");
+      size.clname = clname;
+      size.can3d = can3d;
 
-      if ((!fp || fp.mode3d) && (can3d > 0)) {
-         size.x = Math.round(size.x + size.width * JSROOT.gStyle.fPadLeftMargin);
-         size.y = Math.round(size.y + size.height * JSROOT.gStyle.fPadTopMargin);
-         size.width = Math.round(size.width * (1 - JSROOT.gStyle.fPadLeftMargin - JSROOT.gStyle.fPadRightMargin));
-         size.height = Math.round(size.height * (1 - JSROOT.gStyle.fPadTopMargin - JSROOT.gStyle.fPadBottomMargin));
-      }
-
-      let pp = this.getPadPainter(),
-          rect = pp ? pp.getPadRect() : { width: 100, height: 100 },
-          x2 = rect.width - size.x - size.width,
-          y2 = rect.height - size.y - size.height;
-
-      if ((x2 >= 0) && (y2 >= 0)) {
+      let rect = pp ?  pp.getPadRect() : null;
+      if (rect) {
          // while 3D canvas uses area also for the axis labels, extend area relative to normal frame
-         size.x = Math.round(size.x * 0.3);
-         size.y = Math.round(size.y * 0.9);
-         size.width = rect.width - size.x - Math.round(x2 * 0.3);
-         size.height = rect.height - size.y - Math.round(y2 * 0.5);
+         let dx = Math.round(size.width*0.07), dy = Math.round(size.height*0.05);
+
+         size.x = Math.max(0, size.x-dx);
+         size.y = Math.max(0, size.y-dy);
+         size.width = Math.min(size.width + 2*dx, rect.width - size.x);
+         size.height = Math.min(size.height + 2*dy, rect.height - size.y);
       }
 
       if (can3d === 1)
@@ -303,30 +297,26 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
          }
       } else if (JSROOT.nodejs) {
          // try to use WebGL inside node.js - need to create headless context
-         let gl = require('gl')(width, height, { preserveDrawingBuffer: true });
-
          const { createCanvas } = require('canvas');
-
          args.canvas = createCanvas(width, height);
          args.canvas.addEventListener = function() { }; // dummy
+         args.canvas.removeEventListener = function() { }; // dummy
          args.canvas.style = {};
 
-         args.context = gl;
+         let gl = require('gl')(width, height, { preserveDrawingBuffer: true });
 
-         // in node.js too many similar warnings makes it difficult to debug
-         let warn = console.warn;
-         console.warn = function(msg) {
-            if (msg && msg.indexOf("OES_texture_half_float") < 0 && msg.indexOf("EXT_texture_filter_anisotropic") < 0 &&
-                       msg.indexOf("WEBGL_depth_texture") < 0 && msg.indexOf("OES_vertex_array_object") < 0)
-              console.log("NEW: " + msg);
+         if (!gl) {
+            console.error("Fail to create headless-gl");
+         } else {
+            args.context = gl;
+            gl.canvas = args.canvas;
          }
+
          renderer = new THREE.WebGLRenderer(args);
 
          renderer.jsroot_output = new THREE.WebGLRenderTarget(width, height);
 
          renderer.setRenderTarget(renderer.jsroot_output);
-
-         console.warn = warn;
 
          need_workaround = true;
       } else {
@@ -357,16 +347,34 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
       renderer.setJSROOTSize = function(width, height) {
          if ((this.jsroot_render3d === JSROOT.constants.Render3D.WebGLImage) && !JSROOT.batch_mode && !JSROOT.nodejs)
             return d3.select(this.jsroot_dom).attr("width", width).attr("height", height);
-      }
+      };
 
       return renderer;
+   }
+
+   /** @summary Cleanup created renderer object
+     * @private */
+   jsrp.cleanupRender3D = function(renderer) {
+      if (!renderer) return;
+
+      if (JSROOT.nodejs) {
+         let ctxt = (typeof renderer.getContext == 'function') ? renderer.getContext() : null;
+         let ext = ctxt ? ctxt.getExtension('STACKGL_destroy_context') : null;
+         if (ext) ext.destroy();
+      } else {
+         // suppress warnings in Chrome about lost webgl context, not required in firefox
+         if (JSROOT.browser.isChrome && (typeof renderer.forceContextLoss == "function"))
+            renderer.forceContextLoss();
+
+         if (typeof renderer.dispose == "function")
+            renderer.dispose();
+      }
    }
 
    /** @summary Cleanup previous renderings before doing next one
      * @desc used together with SVG
      * @private */
    jsrp.beforeRender3D = function(renderer) {
-      // cleanup previous rendering, from SVG renderer
       if (renderer.clearHTML) renderer.clearHTML();
    }
 
@@ -524,7 +532,7 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
    TooltipFor3D.prototype.show = function(v /*, mouse_pos, status_func*/) {
       if (!v || (v==="")) return this.hide();
 
-      if (v && (typeof v =='object') && (v.lines || v.line)) {
+      if ((typeof v =='object') && (v.lines || v.line)) {
          if (v.only_status) return this.hide();
 
          if (v.line) {
@@ -566,14 +574,12 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
      * @private */
    jsrp.createOrbitControl = function(painter, camera, scene, renderer, lookat) {
 
-      if (JSROOT.settings.Zooming && JSROOT.settings.ZoomWheel)
-         renderer.domElement.addEventListener( 'wheel', control_mousewheel);
-
-      let enable_zoom = JSROOT.settings.Zooming && JSROOT.settings.ZoomMouse,
-          enable_select = (typeof painter.processMouseClick == "function"),
-          control = null;
+      let control = null,
+          enable_zoom = JSROOT.settings.Zooming && JSROOT.settings.ZoomMouse,
+          enable_select = (typeof painter.processMouseClick == "function");
 
       function control_mousedown(evnt) {
+         if (!control) return;
 
          // function used to hide some events from orbit control and redirect them to zooming rect
          if (control.mouse_zoom_mesh) {
@@ -601,12 +607,13 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
       }
 
       function control_mouseup(evnt) {
+         if (!control) return;
 
-         if (control.mouse_zoom_mesh && control.mouse_zoom_mesh.point2 && control.painter.Get3DZoomCoord) {
+         if (control.mouse_zoom_mesh && control.mouse_zoom_mesh.point2 && control.painter.get3dZoomCoord) {
 
             let kind = control.mouse_zoom_mesh.object.zoom,
-                pos1 = control.painter.Get3DZoomCoord(control.mouse_zoom_mesh.point, kind),
-                pos2 = control.painter.Get3DZoomCoord(control.mouse_zoom_mesh.point2, kind);
+                pos1 = control.painter.get3dZoomCoord(control.mouse_zoom_mesh.point, kind),
+                pos2 = control.painter.get3dZoomCoord(control.mouse_zoom_mesh.point2, kind);
 
             if (pos1>pos2) { let v = pos1; pos1 = pos2; pos2 = v; }
 
@@ -641,6 +648,55 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
             }
          }
       }
+
+      function render3DFired(painter) {
+         if (!painter || painter.renderer === undefined) return false;
+         return painter.render_tmout !== undefined; // when timeout configured, object is prepared for rendering
+      }
+
+      function control_mousewheel(evnt) {
+         if (!control) return;
+
+         // try to handle zoom extra
+
+         if (render3DFired(control.painter) || control.mouse_zoom_mesh) {
+            evnt.preventDefault();
+            evnt.stopPropagation();
+            evnt.stopImmediatePropagation();
+            return; // already fired redraw, do not react on the mouse wheel
+         }
+
+         let intersect = control.detectZoomMesh(evnt);
+         if (!intersect) return;
+
+         evnt.preventDefault();
+         evnt.stopPropagation();
+         evnt.stopImmediatePropagation();
+
+         if (control.painter && (typeof control.painter.analyzeMouseWheelEvent == 'function')) {
+            let kind = intersect.object.zoom,
+                position = intersect.point[kind],
+                item = { name: kind, ignore: false };
+
+            // z changes from 0..2*size_z3d, others -size_x3d..+size_x3d
+            switch (kind) {
+               case "x": position = (position + control.painter.size_x3d)/2/control.painter.size_x3d; break;
+               case "y": position = (position + control.painter.size_y3d)/2/control.painter.size_y3d; break;
+               case "z": position = position/2/control.painter.size_z3d; break;
+            }
+
+            control.painter.analyzeMouseWheelEvent(evnt, item, position, false);
+
+            if ((kind==="z") && intersect.object.use_y_for_z) kind = "y";
+
+            control.painter.zoom(kind, item.min, item.max);
+         }
+      }
+
+      // assign own handler before creating OrbitControl
+
+      if (JSROOT.settings.Zooming && JSROOT.settings.ZoomWheel)
+         renderer.domElement.addEventListener( 'wheel', control_mousewheel);
 
       if (enable_zoom || enable_select) {
          renderer.domElement.addEventListener('pointerdown', control_mousedown);
@@ -687,8 +743,7 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
             this.domElement.removeEventListener('pointerup', control_mouseup);
          }
 
-         if (this.lstn_click)
-            this.domElement.removeEventListener('click', this.lstn_click);
+         this.domElement.removeEventListener('click', this.lstn_click);
          this.domElement.removeEventListener('dblclick', this.lstn_dblclick);
          this.domElement.removeEventListener('contextmenu', this.lstn_contextmenu);
          this.domElement.removeEventListener('mousemove', this.lstn_mousemove);
@@ -760,14 +815,43 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
          return null;
       }
 
-      control.processDblClick = function(evnt) {
-         let intersect = this.detectZoomMesh(evnt);
-         if (intersect && this.painter) {
-            this.painter.unzoom(intersect.object.use_y_for_z ? "y" : intersect.object.zoom);
-         } else {
-            this.reset();
+      control.getInfoAtMousePosition = function(mouse_pos) {
+         let intersects = this.getMouseIntersects(mouse_pos),
+             tip = null, painter = null;
+
+         for (let i = 0; i < intersects.length; ++i)
+            if (intersects[i].object.tooltip) {
+               tip = intersects[i].object.tooltip(intersects[i]);
+               painter = intersects[i].object.painter;
+               break;
          }
-         // this.painter.render3D();
+
+         if (tip && painter)
+            return { obj: painter.getObject(),  name: painter.getObject().fName,
+                     bin: tip.bin, cont: tip.value,
+                     binx: tip.ix, biny: tip.iy, binz: tip.iz,
+                     grx: (tip.x1+tip.x2)/2, gry: (tip.y1+tip.y2)/2, grz: (tip.z1+tip.z2)/2 };
+      }
+
+      control.processDblClick = function(evnt) {
+         // first check if zoom mesh clicked
+         let zoom_intersect = this.detectZoomMesh(evnt);
+         if (zoom_intersect && this.painter) {
+            this.painter.unzoom(zoom_intersect.object.use_y_for_z ? "y" : zoom_intersect.object.zoom);
+            return;
+         }
+
+         // then check if double-click handler assigned
+         let fp = this.painter ? this.painter.getFramePainter() : null;
+         if (fp && typeof fp._dblclick_handler == 'function') {
+            let info = this.getInfoAtMousePosition(this.getMousePos(evnt, {}));
+            if (info) {
+               fp._dblclick_handler(info);
+               return;
+            }
+          }
+
+          this.reset();
       }
 
       control.changeEvent = function() {
@@ -823,7 +907,7 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
       }
 
       control.removeZoomMesh = function() {
-         if (this.mouse_zoom_mesh && this.mouse_zoom_mesh.object.ShowSelection())
+         if (this.mouse_zoom_mesh && this.mouse_zoom_mesh.object.showSelection())
             this.painter.render3D();
          this.mouse_zoom_mesh = null; // in any case clear mesh, enable orbit control again
       }
@@ -844,13 +928,13 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
             if (zoom2 && (zoom2.object === this.mouse_zoom_mesh.object)) {
                pnt2 = zoom2.point;
             } else {
-               pnt2 = this.mouse_zoom_mesh.object.GlobalIntersect(this.raycaster);
+               pnt2 = this.mouse_zoom_mesh.object.globalIntersect(this.raycaster);
             }
 
             if (pnt2) this.mouse_zoom_mesh.point2 = pnt2;
 
             if (pnt2 && this.painter.enable_highlight)
-               if (this.mouse_zoom_mesh.object.ShowSelection(this.mouse_zoom_mesh.point, pnt2))
+               if (this.mouse_zoom_mesh.object.showSelection(this.mouse_zoom_mesh.point, pnt2))
                   this.painter.render3D(0);
 
             this.tooltip.hide();
@@ -929,68 +1013,55 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
          }
       }
 
-      function render3DFired(painter) {
-         if (!painter || painter.renderer === undefined) return false;
-         return painter.render_tmout !== undefined; // when timeout configured, object is prepared for rendering
-      }
-
-      function control_mousewheel(evnt) {
-         // try to handle zoom extra
-
-         if (render3DFired(control.painter) || control.mouse_zoom_mesh) {
-            evnt.preventDefault();
-            evnt.stopPropagation();
-            evnt.stopImmediatePropagation();
-            return; // already fired redraw, do not react on the mouse wheel
-         }
-
-         let intersect = control.detectZoomMesh(evnt);
-         if (!intersect) return;
-
-         evnt.preventDefault();
-         evnt.stopPropagation();
-         evnt.stopImmediatePropagation();
-
-         if (control.painter && (typeof control.painter.analyzeMouseWheelEvent == 'function')) {
-            let kind = intersect.object.zoom,
-                position = intersect.point[kind],
-                item = { name: kind, ignore: false };
-
-            // z changes from 0..2*size_z3d, others -size_xy3d..+size_xy3d
-            if (kind!=="z") position = (position + control.painter.size_xy3d)/2/control.painter.size_xy3d;
-                       else position = position/2/control.painter.size_z3d;
-
-            control.painter.analyzeMouseWheelEvent(evnt, item, position, false);
-
-            if ((kind==="z") && intersect.object.use_y_for_z) kind = "y";
-
-            control.painter.zoom(kind, item.min, item.max);
-         }
-      }
-
       control.mainProcessDblClick = function(evnt) {
+         // suppress simple click handler if double click detected
+         if (this.single_click_tm) {
+            clearTimeout(this.single_click_tm);
+            delete this.single_click_tm;
+         }
          this.processDblClick(evnt);
       }
 
-      if (painter && painter.options && painter.options.mouse_click) {
-         control.processClick = function(mouse) {
-            if (typeof this.ProcessSingleClick == 'function') {
-               let intersects = this.getMouseIntersects(mouse);
-               this.ProcessSingleClick(intersects);
+      control.processClick = function(mouse_pos, kind) {
+         delete this.single_click_tm;
+
+         if (kind == 1) {
+            let fp = this.painter ? this.painter.getFramePainter() : null;
+            if (fp && (typeof fp._click_handler == 'function')) {
+               let info = this.getInfoAtMousePosition(mouse_pos);
+               if (info) {
+                  fp._click_handler(info);
+                  return;
+               }
             }
          }
 
-         control.lstn_click = function(evnt) {
-            if (this.single_click_tm) {
-               clearTimeout(this.single_click_tm);
-               delete this.single_click_tm;
-            }
+         // method assigned in the Eve7 and used for object selection
+         if ((kind == 2) && (typeof this.ProcessSingleClick == 'function')) {
+            let intersects = this.getMouseIntersects(mouse_pos);
+            this.ProcessSingleClick(intersects);
+         }
+      };
 
-            // if normal event, set longer timeout waiting if double click not detected
-            if (evnt.detail != 2)
-               this.single_click_tmout = setTimeout(this.processClick.bind(this, this.getMousePos(evnt, {})), 300);
-         }.bind(control);
-      }
+      control.lstn_click = function(evnt) {
+         // ignore right-mouse click
+         if (evnt.detail == 2) return;
+
+         if (this.single_click_tm) {
+            clearTimeout(this.single_click_tm);
+            delete this.single_click_tm;
+         }
+
+         let kind = 0, fp = this.painter ? this.painter.getFramePainter() : null;
+         if (fp && typeof fp._click_handler == 'function')
+            kind = 1; // user click handler
+         else if (this.ProcessSingleClick && this.painter && this.painter.options && this.painter.options.mouse_click)
+            kind = 2;  // eve7 click handler
+
+         // if normal event, set longer timeout waiting if double click not detected
+         if (kind)
+            this.single_click_tm = setTimeout(this.processClick.bind(this, this.getMousePos(evnt, {}), kind), 300);
+      }.bind(control);
 
       control.addEventListener('change', () => control.changeEvent());
       control.addEventListener('start', () => control.startEvent());
@@ -1001,8 +1072,7 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
       control.lstn_mousemove = evnt => control.mainProcessMouseMove(evnt);
       control.lstn_mouseleave = () => control.mainProcessMouseLeave();
 
-      if (control.lstn_click)
-         renderer.domElement.addEventListener('click', control.lstn_click);
+      renderer.domElement.addEventListener('click', control.lstn_click);
       renderer.domElement.addEventListener('dblclick', control.lstn_dblclick);
       renderer.domElement.addEventListener('contextmenu', control.lstn_contextmenu);
       renderer.domElement.addEventListener('mousemove', control.lstn_mousemove);
@@ -1212,7 +1282,7 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
          m.add(m.js_special);
       }
 
-      if (color) m.js_special.material.color = new THREE.Color(color);
+      m.js_special.material.color = new THREE.Color(color);
       if (index !== undefined) m.js_special.geometry.setDrawRange(index, 1);
    }
 
@@ -1244,7 +1314,7 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
       this.pos[this.indx]   = x;
       this.pos[this.indx+1] = y;
       this.pos[this.indx+2] = z;
-      this.indx+=3;
+      this.indx += 3;
    }
 
    /** @summary Create points */
@@ -1260,40 +1330,50 @@ JSROOT.define(['d3', 'threejs_jsroot', 'painter'], (d3, THREE, jsrp) => {
       // special dots
       if (!args.style) k = 1.1; else
       if (args.style === 1) k = 0.3; else
-      if (args.style === 2) args.style = 3; else // just avoid plot of "+" sign, issue #205
       if (args.style === 6) k = 0.5; else
       if (args.style === 7) k = 0.7;
 
-      let material;
+      let makePoints = (material, skip_promise) => {
+         let pnts = new THREE.Points(this.geom, material);
+         pnts.nvertex = 1;
+         return !args.promise || skip_promise ? pnts : Promise.resolve(pnts);
+      };
 
-      if (!args.style || (k !== 1) || JSROOT.nodejs) {
-         // this is plain creation of points, no texture loading, which does not work in node.js
-         material = new THREE.PointsMaterial( { size: (this.webgl ? 3 : 1) * this.scale * k, color: args.color } );
+      // this is plain creation of points, no need for texture loading
+      if ((k !== 1) || (JSROOT.nodejs && !args.promise))
+         return makePoints(new THREE.PointsMaterial({ size: 3*this.scale * k, color: args.color }));
 
-      } else {
+      let handler = new JSROOT.TAttMarkerHandler({ style: args.style, color: args.color, size: 7 }),
+          w = handler.fill ? 1 : 7,
+          dataUrl = 'data:image/svg+xml;utf8,' +
+                    '<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg">' +
+                    `<path d="${handler.create(32,32)}" stroke="${handler.getStrokeColor()}" stroke-width="${w}" fill="${handler.getFillColor()}"/>` +
+                    '</svg>',
+          loader = new THREE.TextureLoader();
 
-         let handler = new JSROOT.TAttMarkerHandler({ style: args.style, color: args.color, size: 8 });
+      if (args.promise) {
+         let texture_promise;
+         if (JSROOT.nodejs) {
+            const { createCanvas, loadImage } = require('canvas');
 
-         let plainSVG = '<svg width="70" height="70" xmlns="http://www.w3.org/2000/svg">' +
-                        '<path d="' + handler.create(35,35) + '" stroke="' + handler.getStrokeColor() + '" stroke-width="4" fill="' + handler.getFillColor() + '"/>' +
-                        '</svg>';
+            texture_promise = loadImage(dataUrl).then(img => {
+               const canvas = createCanvas(64, 64);
+               const ctx = canvas.getContext('2d');
+               ctx.drawImage(img, 0, 0, 64, 64);
+               return new THREE.CanvasTexture(canvas);
+             });
 
-         // let need_replace = JSROOT.nodejs && !globalThis.document;
-         // if (need_replace) globalThis.document = JSROOT._.get_document();
+         } else {
+            texture_promise = new Promise(resolveFunc => {
+               loader.load(dataUrl, texture => resolveFunc(texture));
+            });
+         }
 
-         let texture = new THREE.TextureLoader().load( 'data:image/svg+xml;utf8,' + plainSVG);
-
-         // if (need_replace) globalThis.document = undefined;
-
-         material = new THREE.PointsMaterial( { size: (this.webgl ? 3 : 1) * this.scale, map: texture, transparent: true } );
+         return texture_promise.then(texture => makePoints(new THREE.PointsMaterial({ size: 3*this.scale, map: texture, transparent: true }), true));
       }
 
-      let pnts = new THREE.Points(this.geom, material);
-      pnts.nvertex = 1;
-
-      return pnts;
+      return makePoints(new THREE.PointsMaterial({ size: 3*this.scale, map: loader.load(dataUrl), transparent: true }));
    }
-
 
    // ==============================================================================
 
