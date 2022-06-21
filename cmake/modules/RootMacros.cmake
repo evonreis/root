@@ -295,7 +295,6 @@ function(ROOT_GENERATE_DICTIONARY dictionary)
     get_target_property(target_incdirs ${ARG_MODULE} INCLUDE_DIRECTORIES)
     if(target_incdirs)
        foreach(dir ${target_incdirs})
-          string(REGEX REPLACE "^[$]<BUILD_INTERFACE:(.+)>" "\\1" dir ${dir})
           # check that dir not a empty dir like $<BUILD_INTERFACE:>
           if(NOT ${dir} MATCHES "^[$]")
              list(APPEND incdirs ${dir})
